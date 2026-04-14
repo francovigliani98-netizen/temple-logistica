@@ -1,244 +1,190 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tablero Logístico — Temple Brewery</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="css/styles.css">
-</head>
-<body>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f8f9fa;--surface:#fff;--surface2:#f1f3f5;
+  --border:#e2e8f0;--border2:#cbd5e1;
+  --text:#0f172a;--text2:#475569;--text3:#94a3b8;
+  --blue:#2563eb;--blue-light:#eff6ff;--blue-dark:#1e40af;
+  --green:#16a34a;--green-light:#f0fdf4;--green-dark:#14532d;
+  --amber:#d97706;--amber-light:#fffbeb;--amber-dark:#78350f;
+  --red:#dc2626;--red-light:#fef2f2;--red-dark:#7f1d1d;
+  --teal:#0d9488;--teal-light:#f0fdfa;
+  --navy:#1e3a5f;
+  --radius:8px;--radius-lg:12px;
+  --shadow:0 1px 3px rgba(0,0,0,0.08);
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
 
-<!-- LOADING OVERLAY -->
-<div class="loading-overlay" id="loading-overlay">
-  <div class="spinner"></div>
-  <div class="loading-text">Cargando datos...</div>
-</div>
+/* LAYOUT */
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:220px;background:var(--navy);display:flex;flex-direction:column;z-index:100;overflow-y:auto}
+.sidebar-logo{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,0.1)}
+.sidebar-logo .brand{font-size:15px;font-weight:700;color:#fff;letter-spacing:-0.3px}
+.sidebar-logo .sub{font-size:11px;color:rgba(255,255,255,0.45);margin-top:2px}
+.nav-section{padding:16px 10px 8px;font-size:10px;font-weight:600;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.08em}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 14px;margin:1px 6px;border-radius:var(--radius);cursor:pointer;color:rgba(255,255,255,0.65);font-size:13px;transition:all 0.15s}
+.nav-item:hover{background:rgba(255,255,255,0.08);color:#fff}
+.nav-item.active{background:rgba(255,255,255,0.15);color:#fff;font-weight:500}
+.nav-item svg{width:16px;height:16px;flex-shrink:0;opacity:0.8}
+.sidebar-bottom{margin-top:auto;padding:12px 10px;border-top:1px solid rgba(255,255,255,0.1)}
+.admin-link{display:block;padding:10px 14px;background:rgba(255,255,255,0.08);border-radius:var(--radius);cursor:pointer;transition:background 0.15s;text-decoration:none;text-align:center}
+.admin-link:hover{background:rgba(255,255,255,0.14)}
+.admin-link span{font-size:12px;color:rgba(255,255,255,0.7);font-weight:500}
 
-<!-- ERROR BANNER -->
-<div id="error-banner" style="display:none;position:fixed;top:0;left:0;right:0;background:var(--red);color:#fff;padding:12px 24px;text-align:center;font-size:13px;z-index:999;"></div>
+.main{margin-left:220px;min-height:100vh;display:flex;flex-direction:column}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.topbar-title{font-size:16px;font-weight:600;color:var(--text)}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.period-chip{font-size:12px;padding:4px 12px;background:var(--surface2);border-radius:20px;color:var(--text2)}
+.page{display:none;padding:24px;animation:fadeIn 0.15s}
+.page.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
-<!-- SIDEBAR -->
-<nav class="sidebar">
-  <div class="sidebar-logo">
-    <div class="brand">Temple Brewery</div>
-    <div class="sub">Tablero Logístico</div>
-  </div>
-  <div class="nav-section">Vistas</div>
-  <div class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard',this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-    <span>Resumen</span>
-  </div>
-  <div class="nav-item" data-page="costos" onclick="switchPage('costos',this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-    <span>Costos</span>
-  </div>
-  <div class="nav-item" data-page="clientes" onclick="switchPage('clientes',this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-    <span>Clientes</span>
-  </div>
-  <div class="nav-item" data-page="servicio" onclick="switchPage('servicio',this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-    <span>Servicio</span>
-  </div>
-  <div class="nav-item" data-page="pedidos" onclick="switchPage('pedidos',this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-    <span>Pedidos</span>
-  </div>
-  <div class="nav-item" data-page="simulador" onclick="switchPage('simulador',this)">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
-    <span>Simulador</span>
-  </div>
-  <div class="sidebar-bottom">
-    <a class="admin-link" href="admin.html"><span>⚙ Panel Admin</span></a>
-  </div>
-</nav>
+/* KPI GRID */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px}
+.kpi-card .label{font-size:11px;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px}
+.kpi-card .value{font-size:24px;font-weight:700;color:var(--text);line-height:1}
+.kpi-card .sub{font-size:12px;color:var(--text2);margin-top:6px}
+.kpi-card.accent{border-left:3px solid var(--blue)}
+.kpi-card.accent-green{border-left:3px solid var(--green)}
+.kpi-card.accent-red{border-left:3px solid var(--red)}
+.kpi-card.accent-amber{border-left:3px solid var(--amber)}
 
-<!-- MAIN -->
-<div class="main">
-  <div class="topbar">
-    <div class="topbar-title" id="page-title">Resumen</div>
-    <div class="topbar-right">
-      <span class="period-chip" id="total-pedidos-chip"></span>
-      <span class="period-chip" id="period-chip">Cargando...</span>
-      <select id="filter-mes" style="font-size:12px;padding:5px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text)" onchange="applyGlobalFilter()">
-        <option value="">Todos los meses</option>
-      </select>
-    </div>
-  </div>
+/* CHARTS */
+.charts-row{display:grid;gap:16px;margin-bottom:20px}
+.charts-2{grid-template-columns:1fr 1fr}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px}
+.chart-card h3{font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px}
+.chart-card .chart-sub{font-size:12px;color:var(--text3);margin-bottom:16px}
+.chart-wrap{position:relative;height:200px}
+.chart-wrap.tall{height:260px}
 
-  <!-- EMPTY STATE -->
-  <div id="empty-state" style="display:none;min-height:70vh;align-items:center;justify-content:center">
-    <div style="text-align:center;padding:40px">
-      <div style="font-size:48px;margin-bottom:16px">📦</div>
-      <h2 style="font-size:20px;font-weight:600;margin-bottom:8px">Sin datos todavía</h2>
-      <p style="color:var(--text2);margin-bottom:20px">El admin todavía no cargó ningún archivo.</p>
-      <a href="admin.html" style="color:var(--blue);text-decoration:underline;font-size:14px">Ir al panel admin →</a>
-    </div>
-  </div>
+/* TABLE */
+.table-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:20px}
+.table-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.table-header h3{font-size:14px;font-weight:600}
+.filters{display:flex;gap:8px;flex-wrap:wrap}
+.filters select,.filters input{font-size:12px;padding:5px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);outline:none}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text2);font-weight:600;white-space:nowrap;background:var(--surface2);font-size:11px;text-transform:uppercase;letter-spacing:0.04em}
+td{padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+tr:hover td{background:var(--surface2)}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.badge.green{background:var(--green-light);color:var(--green-dark)}
+.badge.amber{background:var(--amber-light);color:var(--amber-dark)}
+.badge.red{background:var(--red-light);color:var(--red-dark)}
+.badge.blue{background:var(--blue-light);color:var(--blue-dark)}
+.badge.gray{background:var(--surface2);color:var(--text2)}
+.num-right{text-align:right}
 
-  <!-- DASHBOARD -->
-  <div class="page active" id="page-dashboard">
-    <div id="kpi-grid" class="kpi-grid"></div>
-    <div class="charts-row charts-2">
-      <div class="chart-card"><h3>Gasto mensual</h3><div class="chart-sub">Total facturado por período</div><div class="chart-wrap"><canvas id="c-mensual"></canvas></div></div>
-      <div class="chart-card"><h3>Semáforo logístico</h3><div class="chart-sub">Distribución % logístico s/ valor mercadería</div><div class="chart-wrap"><canvas id="c-semaforo"></canvas></div></div>
-    </div>
-    <div class="charts-row charts-2">
-      <div class="chart-card"><h3>Gasto por región</h3><div class="chart-sub">Top regiones por volumen de gasto</div><div class="chart-wrap tall"><canvas id="c-region"></canvas></div></div>
-      <div class="chart-card"><h3>% logístico por tamaño de pedido</h3><div class="chart-sub">A menor cantidad de cajas, mayor % logístico</div><div class="chart-wrap tall"><canvas id="c-cajas"></canvas></div></div>
-    </div>
-  </div>
+/* SECTION HEADERS */
+.section-header{display:flex;align-items:center;gap:10px;margin-bottom:16px;margin-top:8px}
+.section-header h2{font-size:16px;font-weight:700;color:var(--text)}
+.section-header .desc{font-size:13px;color:var(--text2)}
+.divider{height:1px;background:var(--border);margin:24px 0}
 
-  <!-- COSTOS -->
-  <div class="page" id="page-costos">
-    <div class="charts-row charts-2">
-      <div class="chart-card"><h3>% logístico por producto</h3><div class="chart-sub">Promedio por categoría</div><div class="chart-wrap tall"><canvas id="c-producto"></canvas></div></div>
-      <div class="chart-card"><h3>Gasto acumulado en el año</h3><div class="chart-sub">Evolución mensual acumulada</div><div class="chart-wrap tall"><canvas id="c-acumulado"></canvas></div></div>
-    </div>
-    <div class="divider"></div>
-    <div class="section-header"><h2>Mínimo de cajas rentable por zona</h2><span class="desc">Cantidad mínima para que el % logístico sea menor al 8%</span></div>
-    <div class="table-card">
-      <div class="table-wrap"><table><thead><tr><th>Región</th><th>Cerveza</th><th>Vermú 750ml</th><th>Gin 500ml</th><th>Gin 750ml</th><th>Tarifa 1 caja</th></tr></thead><tbody id="thresh-tbody"></tbody></table></div>
-    </div>
-    <div class="divider"></div>
-    <div class="section-header"><h2>Presupuesto vs. real</h2><span class="desc">Ingresá el presupuesto mensual para ver el desvío</span></div>
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;max-width:500px">
-      <div class="budget-row"><label>Presupuesto mensual</label><input type="number" id="budget-input" placeholder="ej: 4500000" oninput="calcBudget()"></div>
-      <div id="budget-result" style="display:none">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px">
-          <div class="kpi-card"><div class="label">Presupuesto</div><div class="value" style="color:var(--blue)" id="b-pres">-</div></div>
-          <div class="kpi-card"><div class="label">Real promedio</div><div class="value" id="b-real">-</div></div>
-          <div class="kpi-card"><div class="label">Desvío</div><div class="value" id="b-desv">-</div><div class="sub" id="b-desv-pct"></div></div>
-        </div>
-      </div>
-    </div>
-  </div>
+/* RANKING */
+.rank-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:16px}
+.rank-card h3{font-size:13px;font-weight:600;margin-bottom:12px}
+.rank-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)}
+.rank-row:last-child{border-bottom:none}
+.rank-num{font-size:11px;font-weight:700;color:var(--text3);width:20px;flex-shrink:0}
+.rank-name{flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rank-bar-wrap{width:100px;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;flex-shrink:0}
+.rank-bar{height:100%;border-radius:3px;background:var(--blue);transition:width 0.4s}
+.rank-bar.red{background:var(--red)}
+.rank-val{font-size:12px;font-weight:600;color:var(--text);width:70px;text-align:right;flex-shrink:0}
 
-  <!-- CLIENTES -->
-  <div class="page" id="page-clientes">
-    <div class="charts-row charts-2">
-      <div class="rank-card"><h3>Top 10 clientes por gasto logístico</h3><div id="rank-gasto"></div></div>
-      <div class="rank-card"><h3>Clientes con % logístico más alto</h3><div id="rank-pctlog"></div></div>
-    </div>
-    <div class="divider"></div>
-    <div class="section-header"><h2>Clientes en zona roja</h2><span class="desc">Pedidos consistentemente por encima del 15%</span></div>
-    <div class="table-card">
-      <div class="table-header"><h3>Clientes con más pedidos rojos</h3></div>
-      <div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Pedidos totales</th><th>Pedidos rojos</th><th>% en rojo</th><th>Cajas prom.</th><th>% logístico prom.</th><th>Región</th></tr></thead><tbody id="clientes-rojos-tbody"></tbody></table></div>
-    </div>
-  </div>
+/* SIMULADOR */
+.sim-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
+.sim-input-card,.sim-result-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px}
+.sim-input-card h3,.sim-result-card h3{font-size:14px;font-weight:600;margin-bottom:16px}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em}
+.form-group input,.form-group select{width:100%;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);font-size:14px;color:var(--text);background:var(--surface);outline:none;transition:border 0.15s}
+.form-group input:focus,.form-group select:focus{border-color:var(--blue)}
+.result-big{text-align:center;padding:20px;border-radius:var(--radius-lg);margin-bottom:16px}
+.result-big.green{background:var(--green-light);border:1.5px solid #86efac}
+.result-big.amber{background:var(--amber-light);border:1.5px solid #fcd34d}
+.result-big.red{background:var(--red-light);border:1.5px solid #fca5a5}
+.result-verdict{font-size:22px;font-weight:800;margin-bottom:4px}
+.result-pct{font-size:36px;font-weight:900;line-height:1}
+.result-label{font-size:13px;color:var(--text2);margin-top:4px}
+.result-rows{display:flex;flex-direction:column;gap:8px}
+.result-row{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--surface2);border-radius:var(--radius);font-size:13px}
+.result-row .r-label{color:var(--text2)}
+.result-row .r-val{font-weight:600;color:var(--text)}
+.threshold-info{margin-top:14px;padding:12px;background:var(--blue-light);border-radius:var(--radius);font-size:12px;color:var(--blue-dark);line-height:1.5}
 
-  <!-- SERVICIO -->
-  <div class="page" id="page-servicio">
-    <div class="kpi-grid" id="kpi-servicio"></div>
-    <div class="charts-row charts-2">
-      <div class="chart-card"><h3>OTIF por mes</h3><div class="chart-sub">Evolución del nivel de servicio de Klozer</div><div class="chart-wrap"><canvas id="c-otif"></canvas></div></div>
-      <div class="chart-card"><h3>Incidencias por tipo</h3><div class="chart-sub">Cantidad por tipo de problema</div><div class="chart-wrap"><canvas id="c-incidencias"></canvas></div></div>
-    </div>
-    <div class="divider"></div>
-    <div class="section-header"><h2>Preparación interna vs. Klozer</h2><span class="desc">Días promedio en cada etapa</span></div>
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px">
-      <div id="comp-tiempos"></div>
-    </div>
-  </div>
+/* ALERTS */
+.alert{padding:12px 16px;border-radius:var(--radius);font-size:13px;margin-bottom:16px;display:flex;gap:10px;align-items:flex-start}
+.alert.blue{background:var(--blue-light);color:var(--blue-dark);border:1px solid #93c5fd}
+.alert.amber{background:var(--amber-light);color:var(--amber-dark);border:1px solid #fcd34d}
+.alert svg{width:16px;height:16px;flex-shrink:0;margin-top:1px}
 
-  <!-- PEDIDOS -->
-  <div class="page" id="page-pedidos">
-    <div class="table-card">
-      <div class="table-header">
-        <h3>Todos los pedidos</h3>
-        <div class="filters">
-          <select id="f-region" onchange="renderTable()"><option value="">Todas las regiones</option></select>
-          <select id="f-semaforo" onchange="renderTable()">
-            <option value="">Todos</option>
-            <option value="verde">Verde (&lt;8%)</option>
-            <option value="amarillo">Amarillo (8-15%)</option>
-            <option value="rojo">Rojo (&gt;15%)</option>
-          </select>
-          <select id="f-estado" onchange="renderTable()">
-            <option value="">Todos los estados</option>
-            <option value="Entregado">Entregado</option>
-            <option value="Devuelto">Devuelto</option>
-            <option value="Eliminado">Eliminado</option>
-          </select>
-          <input type="text" id="f-search" placeholder="Buscar cliente..." oninput="renderTable()" style="width:160px">
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Pedido</th><th>Fecha</th><th>Mes</th><th>Cliente</th><th>Región</th><th class="num-right">Cajas</th><th class="num-right">Valor decl.</th><th class="num-right">Total flete</th><th>% Logístico</th><th>OTIF</th><th>Días Klozer</th><th>Estado</th></tr></thead>
-          <tbody id="main-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+/* COMP BARS */
+.comp-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.comp-label{width:120px;font-size:12px;color:var(--text2);flex-shrink:0}
+.comp-bars{flex:1;display:flex;gap:4px;align-items:center}
+.comp-bar{height:18px;border-radius:3px;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;font-size:11px;font-weight:600;color:#fff;min-width:20px;transition:width 0.4s}
+.comp-vals{width:110px;font-size:11px;color:var(--text2);text-align:right;flex-shrink:0}
 
-  <!-- SIMULADOR -->
-  <div class="page" id="page-simulador">
-    <div class="alert blue">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <div>Simulá cualquier pedido antes de despacharlo. Si el resultado es rojo, consolidá con otro pedido al mismo destino.</div>
-    </div>
-    <div class="sim-grid">
-      <div class="sim-input-card">
-        <h3>Datos del pedido</h3>
-        <div class="form-group"><label>Zona de destino</label>
-          <select id="sim-region" onchange="calcSim()">
-            <option value="">Seleccionar zona...</option>
-            <option value="Local - CABA">Local - CABA</option>
-            <option value="GBA">GBA</option>
-            <option value="Centro (capitales)">Centro (capitales)</option>
-            <option value="Centro (interior)">Centro (interior)</option>
-            <option value="Cuyo (capitales)">Cuyo (capitales)</option>
-            <option value="Cuyo (interior)">Cuyo (interior)</option>
-            <option value="NEA/NOA (capitales)">NEA/NOA (capitales)</option>
-            <option value="NEA/NOA (interior)">NEA/NOA (interior)</option>
-            <option value="Patagonia (capitales)">Patagonia (capitales)</option>
-            <option value="Patagonia (interior)">Patagonia (interior)</option>
-            <option value="Santa Cruz y TDF">Santa Cruz y TDF</option>
-          </select>
-        </div>
-        <div class="form-group"><label>Cantidad de cajas</label><input type="number" id="sim-cajas" min="1" placeholder="ej: 6" oninput="calcSim()"></div>
-        <div class="form-group"><label>Valor total de la mercadería ($)</label><input type="number" id="sim-valor" min="0" placeholder="ej: 250000" oninput="calcSim()"></div>
-        <div class="form-group"><label>¿Es pallet? (31+ cajas)</label>
-          <select id="sim-pallet" onchange="calcSim()"><option value="0">No</option><option value="1">Sí — 1 pallet</option><option value="2">Sí — 2 pallets</option></select>
-        </div>
-      </div>
-      <div class="sim-result-card">
-        <h3>Resultado</h3>
-        <div id="sim-result-empty" style="text-align:center;padding:40px;color:var(--text3);font-size:13px">Completá los datos para ver el resultado</div>
-        <div id="sim-result-content" style="display:none">
-          <div class="result-big" id="sim-verdict-box">
-            <div class="result-verdict" id="sim-verdict-text"></div>
-            <div class="result-pct" id="sim-pct-val"></div>
-            <div class="result-label">% logístico s/ valor mercadería</div>
-          </div>
-          <div class="result-rows">
-            <div class="result-row"><span class="r-label">Costo flete (tarifa abril)</span><span class="r-val" id="sim-costo-flete"></span></div>
-            <div class="result-row"><span class="r-label">Seguro (1,2%)</span><span class="r-val" id="sim-seguro"></span></div>
-            <div class="result-row"><span class="r-label">Total logístico</span><span class="r-val" id="sim-total-log"></span></div>
-            <div class="result-row"><span class="r-label">Costo por caja</span><span class="r-val" id="sim-costo-caja"></span></div>
-          </div>
-          <div class="threshold-info" id="sim-threshold-msg"></div>
-        </div>
-      </div>
-    </div>
-    <div class="divider"></div>
-    <div class="section-header"><h2>Tabla completa de mínimos rentables</h2><span class="desc">¿Cuántas cajas necesitás para que el pedido sea rentable (&lt; 8%)?</span></div>
-    <div class="table-card">
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Zona</th><th>Cerveza ($13.821/cj)</th><th>Vermú ($52.290/cj)</th><th>Gin 500ml ($54.390/cj)</th><th>Gin 750ml ($81.585/cj)</th><th>Alta Montaña ($122.378/cj)</th></tr></thead>
-          <tbody id="sim-thresh-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</div>
+/* BUDGET */
+.budget-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.budget-row label{font-size:13px;color:var(--text2);width:160px;flex-shrink:0}
+.budget-row input{flex:1;padding:8px 12px;border:1px solid var(--border2);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text);outline:none}
 
-<script src="js/config.js"></script>
-<script src="js/dashboard.js"></script>
-</body>
-</html>
+/* LOADING */
+.loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:16px}
+.loading-overlay.hidden{display:none}
+.spinner{width:36px;height:36px;border:3px solid var(--border2);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:14px;color:var(--text2)}
+
+/* ADMIN STYLES */
+.admin-container{max-width:700px;margin:40px auto;padding:0 24px}
+.admin-login{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:40px;text-align:center;margin-top:80px}
+.admin-login h2{font-size:20px;font-weight:700;margin-bottom:8px}
+.admin-login p{color:var(--text2);margin-bottom:24px}
+.admin-login input{width:100%;padding:12px;border:1px solid var(--border2);border-radius:var(--radius);font-size:15px;margin-bottom:12px;outline:none}
+.admin-login input:focus{border-color:var(--blue)}
+.btn{padding:10px 20px;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all 0.15s}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover{background:var(--blue-dark)}
+.btn-primary:disabled{opacity:0.5;cursor:not-allowed}
+.btn-secondary{background:var(--surface2);color:var(--text)}
+.btn-secondary:hover{background:var(--border2)}
+.btn-danger{background:var(--red);color:#fff}
+.btn-danger:hover{background:var(--red-dark)}
+.upload-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;margin-bottom:20px}
+.upload-section h3{font-size:15px;font-weight:600;margin-bottom:16px}
+.upload-row-admin{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.upload-btn-admin{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 20px;border:1px solid var(--border2);border-radius:var(--radius-lg);cursor:pointer;background:var(--surface2);min-width:200px;transition:all 0.15s}
+.upload-btn-admin:hover{border-color:var(--blue);background:var(--blue-light)}
+.upload-btn-admin.loaded{border-color:var(--green);background:var(--green-light)}
+.upload-btn-admin span{font-size:13px;font-weight:500}
+.upload-btn-admin small{font-size:11px;color:var(--text3)}
+.history-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;margin-bottom:20px}
+.history-section h3{font-size:15px;font-weight:600;margin-bottom:16px}
+.upload-history-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
+.upload-history-row:last-child{border-bottom:none}
+.progress-bar{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin-top:8px}
+.progress-fill{height:100%;background:var(--blue);border-radius:3px;transition:width 0.3s}
+.status-msg{padding:12px;border-radius:var(--radius);font-size:13px;margin-top:12px}
+.status-msg.success{background:var(--green-light);color:var(--green-dark)}
+.status-msg.error{background:var(--red-light);color:var(--red-dark)}
+.status-msg.info{background:var(--blue-light);color:var(--blue-dark)}
+
+@media(max-width:900px){
+  .sidebar{width:60px}
+  .sidebar-logo .brand,.sidebar-logo .sub,.nav-item span,.nav-section{display:none}
+  .nav-item{justify-content:center;padding:10px}
+  .main{margin-left:60px}
+  .charts-2,.sim-grid{grid-template-columns:1fr}
+}
+@media(max-width:600px){
+  .main{margin-left:0}
+  .sidebar{display:none}
+  .kpi-grid{grid-template-columns:1fr 1fr}
+}
