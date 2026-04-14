@@ -1,96 +1,192 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin — Temple Brewery Logística</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<link rel="stylesheet" href="css/styles.css">
-</head>
-<body style="background:var(--bg)">
+# Guía de instalación — Temple Brewery Tablero Logístico
+## Tiempo estimado: 30-40 minutos (sin experiencia técnica)
 
-<!-- LOGIN SECTION -->
-<div id="login-section" style="display:none">
-  <div class="admin-login">
-    <div style="font-size:32px;margin-bottom:16px">🔐</div>
-    <h2>Panel de Administración</h2>
-    <p>Ingresá la contraseña para acceder</p>
-    <input type="password" id="admin-pw" placeholder="Contraseña" onkeydown="if(event.key==='Enter')login()">
-    <div id="login-error" style="color:var(--red);font-size:13px;margin-bottom:12px;min-height:18px"></div>
-    <button class="btn btn-primary" onclick="login()" style="width:100%">Ingresar</button>
-    <div style="margin-top:16px"><a href="index.html" style="font-size:13px;color:var(--text3)">← Volver al dashboard</a></div>
-  </div>
-</div>
+---
 
-<!-- ADMIN PANEL -->
-<div id="admin-panel" style="display:none">
-  <div style="background:var(--navy);padding:14px 24px;display:flex;align-items:center;justify-content:space-between">
-    <div>
-      <span style="color:#fff;font-weight:700;font-size:15px">Temple Brewery</span>
-      <span style="color:rgba(255,255,255,0.45);font-size:13px;margin-left:10px">Panel de Admin</span>
-    </div>
-    <div style="display:flex;gap:12px;align-items:center">
-      <a href="index.html" style="color:rgba(255,255,255,0.65);font-size:13px;text-decoration:none">← Ver dashboard</a>
-      <button class="btn btn-secondary" onclick="logout()" style="font-size:12px;padding:6px 14px">Cerrar sesión</button>
-    </div>
-  </div>
+## PASO 1 — Crear cuenta en Supabase (base de datos)
 
-  <div class="admin-container">
+1. Entrá a https://supabase.com y hacé clic en "Start your project"
+2. Registrate con tu email de Google o con email+contraseña
+3. Una vez dentro, hacé clic en "New project"
+4. Completá:
+   - **Name:** temple-logistica
+   - **Database Password:** anotá esta contraseña (no la vas a necesitar ahora, pero guardala)
+   - **Region:** South America (São Paulo)
+5. Hacé clic en "Create new project" y esperá ~2 minutos
 
-    <!-- UPLOAD SECTION -->
-    <div class="upload-section" style="margin-top:32px">
-      <h3>📤 Cargar nuevos datos</h3>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Los pedidos nuevos se agregan a los existentes. Los que ya están se actualizan si cambiaron.</p>
+### Crear las tablas
 
-      <div class="upload-row-admin">
-        <label class="upload-btn-admin" id="btn-fact">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          <span>Facturación Klozer</span>
-          <small id="fact-name">Ningún archivo seleccionado</small>
-          <input type="file" id="file-fact-admin" accept=".xlsx,.csv" style="display:none" onchange="loadFile(this,'fact')">
-        </label>
-        <label class="upload-btn-admin" id="btn-ped">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-          <span>Reporte de pedidos</span>
-          <small id="ped-name">Ningún archivo seleccionado</small>
-          <input type="file" id="file-ped-admin" accept=".xlsx,.csv" style="display:none" onchange="loadFile(this,'ped')">
-        </label>
-      </div>
+6. En el menú izquierdo, hacé clic en **"SQL Editor"**
+7. Hacé clic en "New query"
+8. Pegá este código completo y hacé clic en **"Run"**:
 
-      <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
-      <div id="upload-status" style="display:none"></div>
+```sql
+-- Tabla principal de pedidos
+CREATE TABLE pedidos (
+  id bigserial PRIMARY KEY,
+  pid text UNIQUE NOT NULL,
+  fecha date,
+  mes text,
+  dest text,
+  razon_social text,
+  region text,
+  cajas integer,
+  pallets numeric,
+  val_decl numeric,
+  total numeric,
+  pct_log numeric,
+  semaforo text,
+  estado text,
+  incidencia text,
+  dias_klozer integer,
+  dias_prep integer,
+  otif text,
+  costo_abril numeric,
+  total_abril numeric,
+  productos text,
+  localidad text,
+  provincia text,
+  created_at timestamptz DEFAULT now()
+);
 
-      <div style="margin-top:16px">
-        <button class="btn btn-primary" id="btn-upload" onclick="uploadData()" disabled>
-          Subir a la nube
-        </button>
-      </div>
-    </div>
+-- Tabla de historial de cargas
+CREATE TABLE uploads (
+  id bigserial PRIMARY KEY,
+  uploaded_at timestamptz DEFAULT now(),
+  rows_new integer,
+  rows_updated integer,
+  total_rows integer
+);
 
-    <!-- HISTORY SECTION -->
-    <div class="history-section">
-      <h3>📋 Historial de cargas</h3>
-      <div id="total-count" style="font-size:13px;color:var(--text2);margin-bottom:16px"></div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Fecha y hora</th><th class="num-right">Total pedidos</th><th class="num-right">Nuevos</th><th class="num-right">Actualizados</th></tr></thead>
-          <tbody id="history-tbody"><tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text3)">Cargando...</td></tr></tbody>
-        </table>
-      </div>
-    </div>
+-- Permisos públicos de lectura (para que todos vean el dashboard)
+ALTER TABLE pedidos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE uploads ENABLE ROW LEVEL SECURITY;
 
-    <!-- DANGER ZONE -->
-    <div style="background:var(--surface);border:1px solid #fca5a5;border-radius:var(--radius-lg);padding:24px;margin-bottom:40px">
-      <h3 style="font-size:15px;font-weight:600;color:var(--red);margin-bottom:8px">⚠ Zona peligrosa</h3>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Borrar todos los datos de la base. Esta acción no se puede deshacer.</p>
-      <button class="btn btn-danger" onclick="clearAllData()">Borrar todos los datos</button>
-    </div>
+CREATE POLICY "Lectura pública" ON pedidos FOR SELECT USING (true);
+CREATE POLICY "Escritura con clave" ON pedidos FOR ALL USING (true);
+CREATE POLICY "Lectura pública uploads" ON uploads FOR SELECT USING (true);
+CREATE POLICY "Escritura uploads" ON uploads FOR ALL USING (true);
+```
 
-  </div>
-</div>
+9. Debería decir "Success. No rows returned."
 
-<script src="js/config.js"></script>
-<script src="js/admin.js"></script>
-</body>
-</html>
+### Obtener las claves de conexión
+
+10. En el menú izquierdo, hacé clic en el ícono de engranaje ⚙ → **"Project Settings"**
+11. Hacé clic en **"API"**
+12. Copiá estos dos valores (los vas a necesitar en el Paso 3):
+    - **Project URL** (algo como https://xxxx.supabase.co)
+    - **anon public** key (una cadena larga de letras y números)
+
+---
+
+## PASO 2 — Crear cuenta en GitHub
+
+1. Entrá a https://github.com y hacé clic en "Sign up"
+2. Completá el registro con tu email
+3. Una vez dentro, hacé clic en el **"+"** arriba a la derecha → **"New repository"**
+4. Completá:
+   - **Repository name:** temple-logistica
+   - **Visibility:** Private (recomendado) o Public
+5. Hacé clic en **"Create repository"**
+
+### Subir los archivos
+
+6. En la página del repositorio recién creado, hacé clic en **"uploading an existing file"**
+7. Arrastrá o seleccioná TODOS los archivos de la carpeta `temple-logistica` que descargaste:
+   - `index.html`
+   - `admin.html`
+   - `css/styles.css`
+   - `js/config.js`
+   - `js/dashboard.js`
+   - `js/admin.js`
+   - (Para las subcarpetas css/ y js/, subí cada archivo y GitHub mantiene la estructura)
+8. En el campo "Commit changes", escribí: "Primer upload tablero logístico"
+9. Hacé clic en **"Commit changes"**
+
+---
+
+## PASO 3 — Configurar las claves de Supabase
+
+Antes de publicar, tenés que poner tus claves en el archivo `js/config.js`:
+
+1. En GitHub, abrí el repositorio y hacé clic en `js/config.js`
+2. Hacé clic en el ícono de lápiz ✏ para editar
+3. Reemplazá:
+   - `'TU_SUPABASE_URL'` → pegá tu Project URL del Paso 1
+   - `'TU_SUPABASE_ANON_KEY'` → pegá tu anon key del Paso 1
+   - `'temple2024'` → cambiá por la contraseña que quieras para el admin
+4. Hacé clic en **"Commit changes"**
+
+Ejemplo de cómo debería quedar:
+```javascript
+const SUPABASE_URL = 'https://abcdefghij.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...';
+const ADMIN_PASSWORD = 'miContraseñaSegura123';
+```
+
+---
+
+## PASO 4 — Publicar en Vercel (la URL)
+
+1. Entrá a https://vercel.com y hacé clic en "Sign up"
+2. Elegí **"Continue with GitHub"** y autorizá el acceso
+3. Una vez dentro, hacé clic en **"Add New Project"**
+4. Buscá y seleccioná el repositorio `temple-logistica`
+5. Hacé clic en **"Deploy"** (no necesitás cambiar nada más)
+6. Esperá ~1 minuto mientras despliega
+
+### ¡Listo! Tu dashboard está en vivo
+
+Vercel te va a dar una URL como:
+**`https://temple-logistica.vercel.app`**
+
+Esa es tu URL permanente. Compartila con tu equipo.
+
+---
+
+## PASO 5 — Primera carga de datos
+
+1. Entrá a `https://temple-logistica.vercel.app/admin.html`
+2. Ingresá tu contraseña de admin
+3. Subí los archivos Excel de Klozer (Facturación + Reporte de pedidos)
+4. Hacé clic en "Subir a la nube"
+5. ¡Los datos aparecen en el dashboard para todos!
+
+---
+
+## Uso diario
+
+**Para agregar datos nuevos (vos):**
+- Entrá a `/admin.html` → subí los Excel → clic en "Subir"
+- Los pedidos nuevos se agregan, los existentes se actualizan
+
+**Para ver el dashboard (tu equipo):**
+- Entran directo a la URL principal
+- Sin contraseña, sin instalar nada
+
+---
+
+## Actualizar la tarifa cuando Klozer cambie precios
+
+1. En GitHub, abrí `js/config.js` o `js/dashboard.js`
+2. Buscá el objeto `TARIFF` y modificá los valores
+3. Guardá (commit) → Vercel actualiza automáticamente en ~1 minuto
+
+---
+
+## Preguntas frecuentes
+
+**¿Tiene costo?**
+No. Supabase (hasta 500MB de datos), GitHub y Vercel tienen planes gratuitos
+más que suficientes para este uso.
+
+**¿Qué pasa si me olvido la contraseña de admin?**
+Entrá a GitHub → editá `js/config.js` → cambiá `ADMIN_PASSWORD`.
+
+**¿Puedo cambiar la URL?**
+Sí. En Vercel podés configurar un dominio propio si tenés uno, o cambiar
+el subdominio gratuito en Settings → Domains.
+
+**¿Los datos están seguros?**
+Sí. Supabase usa cifrado estándar. La base de datos es privada a tu cuenta.
