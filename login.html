@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Acceso — Temple Brewery Logística</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="css/styles.css">
+<style>
+  body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg)}
+  .login-wrap{width:100%;max-width:420px;padding:24px}
+  .login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:40px}
+  .login-logo{text-align:center;margin-bottom:32px}
+  .login-logo .brand{font-size:22px;font-weight:800;color:var(--navy);letter-spacing:-0.5px}
+  .login-logo .sub{font-size:13px;color:var(--text3);margin-top:4px}
+  .tab-row{display:flex;gap:0;margin-bottom:24px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .tab{flex:1;padding:9px;text-align:center;font-size:13px;font-weight:500;cursor:pointer;background:var(--surface2);color:var(--text2);border:none;transition:all 0.15s}
+  .tab.active{background:var(--navy);color:#fff}
+  .form-group{margin-bottom:16px}
+  .form-group label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em}
+  .form-group input{width:100%;padding:11px 14px;border:1px solid var(--border2);border-radius:var(--radius);font-size:14px;color:var(--text);background:var(--surface);outline:none;transition:border 0.15s}
+  .form-group input:focus{border-color:var(--blue)}
+  .btn-full{width:100%;padding:12px;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer;border:none;background:var(--navy);color:#fff;transition:all 0.15s;margin-top:4px}
+  .btn-full:hover{background:var(--blue)}
+  .btn-full:disabled{opacity:0.5;cursor:not-allowed}
+  .msg{padding:12px 14px;border-radius:var(--radius);font-size:13px;margin-top:14px;display:none}
+  .msg.error{background:var(--red-light);color:var(--red-dark);border:1px solid #fca5a5}
+  .msg.success{background:var(--green-light);color:var(--green-dark);border:1px solid #86efac}
+  .msg.info{background:var(--blue-light);color:var(--blue-dark);border:1px solid #93c5fd}
+  .divider{height:1px;background:var(--border);margin:20px 0}
+</style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">
+      <div style="font-size:36px;margin-bottom:12px">🍺</div>
+      <div class="brand">Temple Brewery</div>
+      <div class="sub">Tablero Logístico</div>
+    </div>
+
+    <div class="tab-row">
+      <button class="tab active" id="tab-login" onclick="switchTab('login')">Ingresar</button>
+      <button class="tab" id="tab-register" onclick="switchTab('register')">Solicitar acceso</button>
+    </div>
+
+    <!-- LOGIN FORM -->
+    <div id="form-login">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="tu@email.com" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button class="btn-full" id="btn-login" onclick="doLogin()">Ingresar</button>
+      <div class="msg" id="login-msg"></div>
+    </div>
+
+    <!-- REGISTER FORM -->
+    <div id="form-register" style="display:none">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:20px">Creá tu cuenta. Un administrador deberá aprobar tu acceso antes de que puedas ver el dashboard.</p>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="reg-email" placeholder="tu@email.com">
+      </div>
+      <div class="form-group">
+        <label>Contraseña</label>
+        <input type="password" id="reg-password" placeholder="Mínimo 6 caracteres">
+      </div>
+      <div class="form-group">
+        <label>Confirmar contraseña</label>
+        <input type="password" id="reg-password2" placeholder="Repetí la contraseña" onkeydown="if(event.key==='Enter')doRegister()">
+      </div>
+      <button class="btn-full" id="btn-register" onclick="doRegister()">Solicitar acceso</button>
+      <div class="msg" id="register-msg"></div>
+    </div>
+
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script>
+function switchTab(tab) {
+  document.getElementById('form-login').style.display = tab==='login'?'block':'none';
+  document.getElementById('form-register').style.display = tab==='register'?'block':'none';
+  document.getElementById('tab-login').classList.toggle('active', tab==='login');
+  document.getElementById('tab-register').classList.toggle('active', tab==='register');
+}
+
+function showMsg(id, type, text) {
+  const el = document.getElementById(id);
+  el.className = 'msg ' + type;
+  el.textContent = text;
+  el.style.display = 'block';
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const btn = document.getElementById('btn-login');
+
+  if (!email || !password) { showMsg('login-msg','error','Completá todos los campos.'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Ingresando...';
+
+  try {
+    // 1. Autenticar con Supabase
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+
+    // 2. Verificar si tiene acceso aprobado
+    const { data: access, error: accessError } = await supabaseClient
+      .from('user_access')
+      .select('approved')
+      .eq('email', email)
+      .single();
+
+    if (accessError || !access) {
+      await supabaseClient.auth.signOut();
+      showMsg('login-msg','error','Tu cuenta no tiene acceso aprobado. Contactá al administrador.');
+      btn.disabled = false; btn.textContent = 'Ingresar';
+      return;
+    }
+
+    if (!access.approved) {
+      await supabaseClient.auth.signOut();
+      showMsg('login-msg','info','Tu acceso está pendiente de aprobación. El administrador te habilitará pronto.');
+      btn.disabled = false; btn.textContent = 'Ingresar';
+      return;
+    }
+
+    // 3. Acceso aprobado → ir al dashboard
+    window.location.href = 'index.html';
+
+  } catch (err) {
+    let msg = 'Error al ingresar.';
+    if (err.message?.includes('Invalid login')) msg = 'Email o contraseña incorrectos.';
+    if (err.message?.includes('Email not confirmed')) msg = 'Confirmá tu email antes de ingresar.';
+    showMsg('login-msg', 'error', msg);
+    btn.disabled = false; btn.textContent = 'Ingresar';
+  }
+}
+
+async function doRegister() {
+  const email = document.getElementById('reg-email').value.trim();
+  const password = document.getElementById('reg-password').value;
+  const password2 = document.getElementById('reg-password2').value;
+  const btn = document.getElementById('btn-register');
+
+  if (!email || !password) { showMsg('register-msg','error','Completá todos los campos.'); return; }
+  if (password !== password2) { showMsg('register-msg','error','Las contraseñas no coinciden.'); return; }
+  if (password.length < 6) { showMsg('register-msg','error','La contraseña debe tener al menos 6 caracteres.'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Registrando...';
+
+  try {
+    // 1. Crear usuario en Supabase Auth
+    const { data, error } = await supabaseClient.auth.signUp({
+      email, password,
+      options: { emailRedirectTo: window.location.origin + '/login.html' }
+    });
+    if (error) throw error;
+
+    // 2. Crear registro en user_access como pendiente
+    await supabaseClient.from('user_access').upsert({
+      email, approved: false
+    }, { onConflict: 'email' });
+
+    showMsg('register-msg', 'success', '✓ Solicitud enviada. Un administrador aprobará tu acceso pronto.');
+    document.getElementById('reg-email').value = '';
+    document.getElementById('reg-password').value = '';
+    document.getElementById('reg-password2').value = '';
+
+  } catch (err) {
+    let msg = 'Error al registrarse.';
+    if (err.message?.includes('already registered')) msg = 'Este email ya tiene una cuenta.';
+    showMsg('register-msg', 'error', msg);
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Solicitar acceso';
+}
+
+// Si ya está logueado y aprobado, redirigir directo
+window.addEventListener('DOMContentLoaded', async () => {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) {
+    const { data: access } = await supabaseClient
+      .from('user_access')
+      .select('approved')
+      .eq('email', session.user.email)
+      .single();
+    if (access?.approved) window.location.href = 'index.html';
+  }
+});
+</script>
+</body>
+</html>
