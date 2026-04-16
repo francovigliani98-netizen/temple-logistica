@@ -17,7 +17,6 @@ const TARIFF = {
 };
 
 let factRaw = null, pedRaw = null;
-let isAuthenticated = false;
 
 // ---- AUTH ----
 function checkAuth() {
@@ -49,7 +48,6 @@ function logout() {
 function showPanel() {
   document.getElementById('login-section').style.display = 'none';
   document.getElementById('admin-panel').style.display = 'block';
-  isAuthenticated = true;
   loadUploadHistory();
 }
 
@@ -163,20 +161,15 @@ function processToRows(factData, pedData) {
     const totalAbril = costoAbril!=null ? costoAbril+valDecl*0.012 : null;
 
     rows.push({
-      pid,
-      fecha: fecha ? fecha.toISOString().split('T')[0] : null,
-      mes,
-      dest: getCol(f,"Destinatario","destinatario")||p.razonSocial||"",
-      razon_social: p.razonSocial||'',
-      region, cajas, pallets, val_decl: valDecl,
-      total, pct_log: pctLog, semaforo,
-      estado: p.estado||'',
+      pid, fecha: fecha ? fecha.toISOString().split('T')[0] : null,
+      mes, dest: getCol(f,"Destinatario","destinatario")||p.razonSocial||"",
+      razon_social: p.razonSocial||'', region, cajas, pallets, val_decl: valDecl,
+      total, pct_log: pctLog, semaforo, estado: p.estado||'',
       incidencia: ['Devuelto','Eliminado','Entrega Parcial'].includes(p.estado)?'Sí':'No',
       dias_klozer: diasKlozer, dias_prep: diasPrep,
       otif: diasKlozer!=null?(diasKlozer<=1?'Sí':'No'):'',
       costo_abril: costoAbril, total_abril: totalAbril,
-      productos: p.productos||'',
-      localidad: p.localidad||'', provincia: p.provincia||''
+      productos: p.productos||'', localidad: p.localidad||'', provincia: p.provincia||''
     });
   }
   return rows;
@@ -187,9 +180,6 @@ async function uploadData() {
   if (!factRaw || !pedRaw) return;
 
   const btn = document.getElementById('btn-upload');
-  const statusEl = document.getElementById('upload-status');
-  const progressFill = document.getElementById('progress-fill');
-
   btn.disabled = true;
   setStatus('info', 'Procesando archivos...');
   setProgress(10);
@@ -199,8 +189,7 @@ async function uploadData() {
     setProgress(30);
     setStatus('info', `${rows.length} pedidos procesados. Subiendo a la nube...`);
 
-    // Get existing PIDs to avoid duplicates
-    const { data: existing } = await supabase
+    const { data: existing } = await supabaseClient
       .from('pedidos')
       .select('pid');
     const existingPids = new Set((existing||[]).map(r => r.pid));
@@ -210,29 +199,26 @@ async function uploadData() {
 
     setProgress(50);
 
-    // Insert new rows in batches of 100
     if (newRows.length > 0) {
       for (let i = 0; i < newRows.length; i += 100) {
         const batch = newRows.slice(i, i+100);
-        const { error } = await supabase.from('pedidos').insert(batch);
+        const { error } = await supabaseClient.from('pedidos').insert(batch);
         if (error) throw error;
         setProgress(50 + Math.round((i/newRows.length)*30));
       }
     }
 
-    // Upsert existing rows
     if (updateRows.length > 0) {
       for (let i = 0; i < updateRows.length; i += 100) {
         const batch = updateRows.slice(i, i+100);
-        const { error } = await supabase.from('pedidos').upsert(batch, {onConflict:'pid'});
+        const { error } = await supabaseClient.from('pedidos').upsert(batch, {onConflict:'pid'});
         if (error) throw error;
       }
     }
 
     setProgress(90);
 
-    // Save upload record
-    await supabase.from('uploads').insert({
+    await supabaseClient.from('uploads').insert({
       uploaded_at: new Date().toISOString(),
       rows_new: newRows.length,
       rows_updated: updateRows.length,
@@ -242,10 +228,9 @@ async function uploadData() {
     setProgress(100);
     setStatus('success', `✓ Listo. ${newRows.length} pedidos nuevos agregados, ${updateRows.length} actualizados.`);
 
-    // Reset
     factRaw = null; pedRaw = null;
-    document.getElementById('fact-name').textContent = 'Ningún archivo';
-    document.getElementById('ped-name').textContent = 'Ningún archivo';
+    document.getElementById('fact-name').textContent = 'Ningún archivo seleccionado';
+    document.getElementById('ped-name').textContent = 'Ningún archivo seleccionado';
     document.getElementById('btn-fact').classList.remove('loaded');
     document.getElementById('btn-ped').classList.remove('loaded');
     document.getElementById('file-fact-admin').value = '';
@@ -262,7 +247,7 @@ async function uploadData() {
 }
 
 async function loadUploadHistory() {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseClient
     .from('uploads')
     .select('*')
     .order('uploaded_at', {ascending: false})
@@ -287,16 +272,15 @@ async function loadUploadHistory() {
     </tr>`;
   }).join('');
 
-  // Also show total pedidos count
-  const { count } = await supabase.from('pedidos').select('*', {count:'exact', head:true});
+  const { count } = await supabaseClient.from('pedidos').select('*', {count:'exact', head:true});
   document.getElementById('total-count').textContent = count ? `${count} pedidos en la base de datos` : '';
 }
 
 async function clearAllData() {
   if (!confirm('¿Seguro que querés borrar TODOS los datos? Esta acción no se puede deshacer.')) return;
-  const { error } = await supabase.from('pedidos').delete().neq('pid', '____never____');
+  const { error } = await supabaseClient.from('pedidos').delete().neq('pid', '____never____');
   if (!error) {
-    await supabase.from('uploads').delete().neq('id', 0);
+    await supabaseClient.from('uploads').delete().neq('id', 0);
     setStatus('success', 'Todos los datos fueron eliminados.');
     loadUploadHistory();
   } else {
@@ -315,5 +299,4 @@ function setProgress(pct) {
   document.getElementById('progress-fill').style.width = pct + '%';
 }
 
-// Init
 window.addEventListener('DOMContentLoaded', checkAuth);
