@@ -38,11 +38,39 @@
 
   <div class="admin-container">
 
+    <!-- USUARIOS -->
+    <div class="history-section" style="margin-top:32px">
+      <h3>👥 Gestión de accesos</h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Aprobá o rechazá solicitudes de acceso al dashboard.</p>
+
+      <!-- Agregar usuario manualmente -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+        <input type="email" id="new-user-email" placeholder="email@empresa.com" style="flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;outline:none">
+        <button class="btn btn-primary" onclick="addUser()" style="white-space:nowrap">+ Agregar y aprobar</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Estado</th>
+              <th>Solicitud</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="users-tbody">
+            <tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text3)">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="users-msg" style="display:none"></div>
+    </div>
+
     <!-- UPLOAD SECTION -->
-    <div class="upload-section" style="margin-top:32px">
+    <div class="upload-section">
       <h3>📤 Cargar nuevos datos</h3>
       <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Los pedidos nuevos se agregan a los existentes. Los que ya están se actualizan si cambiaron.</p>
-
       <div class="upload-row-admin">
         <label class="upload-btn-admin" id="btn-fact">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -57,18 +85,14 @@
           <input type="file" id="file-ped-admin" accept=".xlsx,.csv" style="display:none" onchange="loadFile(this,'ped')">
         </label>
       </div>
-
       <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
       <div id="upload-status" style="display:none"></div>
-
       <div style="margin-top:16px">
-        <button class="btn btn-primary" id="btn-upload" onclick="uploadData()" disabled>
-          Subir a la nube
-        </button>
+        <button class="btn btn-primary" id="btn-upload" onclick="uploadData()" disabled>Subir a la nube</button>
       </div>
     </div>
 
-    <!-- HISTORY SECTION -->
+    <!-- HISTORY -->
     <div class="history-section">
       <h3>📋 Historial de cargas</h3>
       <div id="total-count" style="font-size:13px;color:var(--text2);margin-bottom:16px"></div>
@@ -92,5 +116,96 @@
 
 <script src="js/config.js"></script>
 <script src="js/admin.js"></script>
+<script>
+// ---- USER MANAGEMENT ----
+async function loadUsers() {
+  const { data, error } = await supabaseClient
+    .from('user_access')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  const tbody = document.getElementById('users-tbody');
+  if (error || !data?.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text3)">Sin solicitudes todavía</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = data.map(u => {
+    const fecha = new Date(u.created_at).toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
+    const badge = u.approved
+      ? '<span class="badge green">Aprobado</span>'
+      : '<span class="badge amber">Pendiente</span>';
+    const actions = u.approved
+      ? `<button class="btn btn-secondary" onclick="revokeUser('${u.email}')" style="font-size:11px;padding:4px 10px">Revocar</button>`
+      : `<button class="btn btn-primary" onclick="approveUser('${u.email}')" style="font-size:11px;padding:4px 10px">Aprobar</button>
+         <button class="btn btn-danger" onclick="deleteUser('${u.email}')" style="font-size:11px;padding:4px 10px;margin-left:4px">Rechazar</button>`;
+    return `<tr>
+      <td>${u.email}</td>
+      <td>${badge}</td>
+      <td>${fecha}</td>
+      <td>${actions}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function approveUser(email) {
+  const { error } = await supabaseClient
+    .from('user_access')
+    .update({ approved: true, approved_at: new Date().toISOString() })
+    .eq('email', email);
+  if (!error) { showUsersMsg('success', `✓ ${email} aprobado.`); loadUsers(); }
+  else showUsersMsg('error', 'Error: ' + error.message);
+}
+
+async function revokeUser(email) {
+  if (!confirm(`¿Revocar acceso a ${email}?`)) return;
+  const { error } = await supabaseClient
+    .from('user_access')
+    .update({ approved: false })
+    .eq('email', email);
+  if (!error) { showUsersMsg('success', `Acceso revocado para ${email}.`); loadUsers(); }
+  else showUsersMsg('error', 'Error: ' + error.message);
+}
+
+async function deleteUser(email) {
+  if (!confirm(`¿Rechazar y eliminar la solicitud de ${email}?`)) return;
+  const { error } = await supabaseClient
+    .from('user_access')
+    .delete()
+    .eq('email', email);
+  if (!error) { showUsersMsg('success', `Solicitud de ${email} eliminada.`); loadUsers(); }
+  else showUsersMsg('error', 'Error: ' + error.message);
+}
+
+async function addUser() {
+  const email = document.getElementById('new-user-email').value.trim();
+  if (!email) return;
+  const { error } = await supabaseClient
+    .from('user_access')
+    .upsert({ email, approved: true, approved_at: new Date().toISOString() }, { onConflict: 'email' });
+  if (!error) {
+    showUsersMsg('success', `✓ ${email} agregado y aprobado.`);
+    document.getElementById('new-user-email').value = '';
+    loadUsers();
+  } else showUsersMsg('error', 'Error: ' + error.message);
+}
+
+function showUsersMsg(type, text) {
+  const el = document.getElementById('users-msg');
+  el.className = 'status-msg ' + type;
+  el.textContent = text;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 4000);
+}
+
+// Override showPanel to also load users
+const _origShowPanel = showPanel;
+function showPanel() {
+  document.getElementById('login-section').style.display = 'none';
+  document.getElementById('admin-panel').style.display = 'block';
+  loadUploadHistory();
+  loadUsers();
+}
+</script>
 </body>
 </html>
