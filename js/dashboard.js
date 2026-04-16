@@ -52,7 +52,7 @@ async function loadData() {
     let from = 0;
     const pageSize = 1000;
     while (true) {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('pedidos')
         .select('*')
         .range(from, from + pageSize - 1)
