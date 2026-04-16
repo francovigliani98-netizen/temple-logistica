@@ -23,11 +23,16 @@
   .btn-full{width:100%;padding:12px;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer;border:none;background:var(--navy);color:#fff;transition:all 0.15s;margin-top:4px}
   .btn-full:hover{background:var(--blue)}
   .btn-full:disabled{opacity:0.5;cursor:not-allowed}
+  .btn-link{background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;padding:0;text-decoration:underline}
+  .btn-link:hover{color:var(--blue-dark)}
   .msg{padding:12px 14px;border-radius:var(--radius);font-size:13px;margin-top:14px;display:none}
   .msg.error{background:var(--red-light);color:var(--red-dark);border:1px solid #fca5a5}
   .msg.success{background:var(--green-light);color:var(--green-dark);border:1px solid #86efac}
   .msg.info{background:var(--blue-light);color:var(--blue-dark);border:1px solid #93c5fd}
-  .divider{height:1px;background:var(--border);margin:20px 0}
+  .back-link{display:block;text-align:center;margin-top:16px;font-size:13px;color:var(--text3);cursor:pointer}
+  .back-link:hover{color:var(--text)}
+  .screen{display:none}
+  .screen.active{display:block}
 </style>
 </head>
 <body>
@@ -39,42 +44,77 @@
       <div class="sub">Tablero Logístico</div>
     </div>
 
-    <div class="tab-row">
-      <button class="tab active" id="tab-login" onclick="switchTab('login')">Ingresar</button>
-      <button class="tab" id="tab-register" onclick="switchTab('register')">Solicitar acceso</button>
+    <!-- ===== PANTALLA: LOGIN / REGISTRO ===== -->
+    <div class="screen active" id="screen-main">
+      <div class="tab-row">
+        <button class="tab active" id="tab-login" onclick="switchTab('login')">Ingresar</button>
+        <button class="tab" id="tab-register" onclick="switchTab('register')">Solicitar acceso</button>
+      </div>
+
+      <!-- LOGIN -->
+      <div id="form-login">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="login-email" placeholder="tu@email.com" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <div style="text-align:right;margin-top:-8px;margin-bottom:16px">
+          <button class="btn-link" onclick="showScreen('screen-forgot')">Olvidé mi contraseña</button>
+        </div>
+        <button class="btn-full" id="btn-login" onclick="doLogin()">Ingresar</button>
+        <div class="msg" id="login-msg"></div>
+      </div>
+
+      <!-- REGISTRO -->
+      <div id="form-register" style="display:none">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:20px">Creá tu cuenta. Un administrador deberá aprobar tu acceso antes de que puedas ver el dashboard.</p>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="reg-email" placeholder="tu@email.com">
+        </div>
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="password" id="reg-password" placeholder="Mínimo 6 caracteres">
+        </div>
+        <div class="form-group">
+          <label>Confirmar contraseña</label>
+          <input type="password" id="reg-password2" placeholder="Repetí la contraseña" onkeydown="if(event.key==='Enter')doRegister()">
+        </div>
+        <button class="btn-full" id="btn-register" onclick="doRegister()">Solicitar acceso</button>
+        <div class="msg" id="register-msg"></div>
+      </div>
     </div>
 
-    <!-- LOGIN FORM -->
-    <div id="form-login">
+    <!-- ===== PANTALLA: OLVIDÉ MI CONTRASEÑA ===== -->
+    <div class="screen" id="screen-forgot">
+      <h3 style="font-size:17px;font-weight:700;margin-bottom:8px">Recuperar contraseña</h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:20px">Ingresá tu email y te enviamos un link para crear una nueva contraseña.</p>
       <div class="form-group">
         <label>Email</label>
-        <input type="email" id="login-email" placeholder="tu@email.com" onkeydown="if(event.key==='Enter')doLogin()">
+        <input type="email" id="forgot-email" placeholder="tu@email.com" onkeydown="if(event.key==='Enter')doForgot()">
       </div>
-      <div class="form-group">
-        <label>Contraseña</label>
-        <input type="password" id="login-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
-      </div>
-      <button class="btn-full" id="btn-login" onclick="doLogin()">Ingresar</button>
-      <div class="msg" id="login-msg"></div>
+      <button class="btn-full" id="btn-forgot" onclick="doForgot()">Enviar link de recuperación</button>
+      <div class="msg" id="forgot-msg"></div>
+      <span class="back-link" onclick="showScreen('screen-main')">← Volver al login</span>
     </div>
 
-    <!-- REGISTER FORM -->
-    <div id="form-register" style="display:none">
-      <p style="font-size:13px;color:var(--text2);margin-bottom:20px">Creá tu cuenta. Un administrador deberá aprobar tu acceso antes de que puedas ver el dashboard.</p>
+    <!-- ===== PANTALLA: NUEVA CONTRASEÑA ===== -->
+    <div class="screen" id="screen-reset">
+      <h3 style="font-size:17px;font-weight:700;margin-bottom:8px">Nueva contraseña</h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:20px">Elegí una nueva contraseña para tu cuenta.</p>
       <div class="form-group">
-        <label>Email</label>
-        <input type="email" id="reg-email" placeholder="tu@email.com">
-      </div>
-      <div class="form-group">
-        <label>Contraseña</label>
-        <input type="password" id="reg-password" placeholder="Mínimo 6 caracteres">
+        <label>Nueva contraseña</label>
+        <input type="password" id="reset-password" placeholder="Mínimo 6 caracteres">
       </div>
       <div class="form-group">
         <label>Confirmar contraseña</label>
-        <input type="password" id="reg-password2" placeholder="Repetí la contraseña" onkeydown="if(event.key==='Enter')doRegister()">
+        <input type="password" id="reset-password2" placeholder="Repetí la contraseña" onkeydown="if(event.key==='Enter')doReset()">
       </div>
-      <button class="btn-full" id="btn-register" onclick="doRegister()">Solicitar acceso</button>
-      <div class="msg" id="register-msg"></div>
+      <button class="btn-full" id="btn-reset" onclick="doReset()">Guardar nueva contraseña</button>
+      <div class="msg" id="reset-msg"></div>
     </div>
 
   </div>
@@ -82,6 +122,13 @@
 
 <script src="js/config.js"></script>
 <script>
+
+// ---- NAVEGACIÓN ENTRE PANTALLAS ----
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
 function switchTab(tab) {
   document.getElementById('form-login').style.display = tab==='login'?'block':'none';
   document.getElementById('form-register').style.display = tab==='register'?'block':'none';
@@ -96,107 +143,121 @@ function showMsg(id, type, text) {
   el.style.display = 'block';
 }
 
+// ---- LOGIN ----
 async function doLogin() {
   const email = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
   const btn = document.getElementById('btn-login');
-
   if (!email || !password) { showMsg('login-msg','error','Completá todos los campos.'); return; }
-
-  btn.disabled = true;
-  btn.textContent = 'Ingresando...';
-
+  btn.disabled = true; btn.textContent = 'Ingresando...';
   try {
-    // 1. Autenticar con Supabase
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) throw error;
-
-    // 2. Verificar si tiene acceso aprobado
-    const { data: access, error: accessError } = await supabaseClient
-      .from('user_access')
-      .select('approved')
-      .eq('email', email)
-      .single();
-
-    if (accessError || !access) {
+    const { data: access } = await supabaseClient
+      .from('user_access').select('approved').eq('email', email).single();
+    if (!access) {
       await supabaseClient.auth.signOut();
-      showMsg('login-msg','error','Tu cuenta no tiene acceso aprobado. Contactá al administrador.');
-      btn.disabled = false; btn.textContent = 'Ingresar';
-      return;
+      showMsg('login-msg','error','Tu cuenta no tiene acceso. Contactá al administrador.');
+      btn.disabled = false; btn.textContent = 'Ingresar'; return;
     }
-
     if (!access.approved) {
       await supabaseClient.auth.signOut();
-      showMsg('login-msg','info','Tu acceso está pendiente de aprobación. El administrador te habilitará pronto.');
-      btn.disabled = false; btn.textContent = 'Ingresar';
-      return;
+      showMsg('login-msg','info','Tu acceso está pendiente de aprobación.');
+      btn.disabled = false; btn.textContent = 'Ingresar'; return;
     }
-
-    // 3. Acceso aprobado → ir al dashboard
     window.location.href = 'index.html';
-
   } catch (err) {
     let msg = 'Error al ingresar.';
     if (err.message?.includes('Invalid login')) msg = 'Email o contraseña incorrectos.';
-    if (err.message?.includes('Email not confirmed')) msg = 'Confirmá tu email antes de ingresar.';
     showMsg('login-msg', 'error', msg);
     btn.disabled = false; btn.textContent = 'Ingresar';
   }
 }
 
+// ---- REGISTRO ----
 async function doRegister() {
   const email = document.getElementById('reg-email').value.trim();
   const password = document.getElementById('reg-password').value;
   const password2 = document.getElementById('reg-password2').value;
   const btn = document.getElementById('btn-register');
-
   if (!email || !password) { showMsg('register-msg','error','Completá todos los campos.'); return; }
   if (password !== password2) { showMsg('register-msg','error','Las contraseñas no coinciden.'); return; }
   if (password.length < 6) { showMsg('register-msg','error','La contraseña debe tener al menos 6 caracteres.'); return; }
-
-  btn.disabled = true;
-  btn.textContent = 'Registrando...';
-
+  btn.disabled = true; btn.textContent = 'Registrando...';
   try {
-    // 1. Crear usuario en Supabase Auth
-    const { data, error } = await supabaseClient.auth.signUp({
-      email, password,
-      options: { emailRedirectTo: window.location.origin + '/login.html' }
-    });
+    const { error } = await supabaseClient.auth.signUp({ email, password });
     if (error) throw error;
-
-    // 2. Crear registro en user_access como pendiente
-    await supabaseClient.from('user_access').upsert({
-      email, approved: false
-    }, { onConflict: 'email' });
-
+    await supabaseClient.from('user_access').upsert({ email, approved: false }, { onConflict: 'email' });
     showMsg('register-msg', 'success', '✓ Solicitud enviada. Un administrador aprobará tu acceso pronto.');
     document.getElementById('reg-email').value = '';
     document.getElementById('reg-password').value = '';
     document.getElementById('reg-password2').value = '';
-
   } catch (err) {
     let msg = 'Error al registrarse.';
     if (err.message?.includes('already registered')) msg = 'Este email ya tiene una cuenta.';
     showMsg('register-msg', 'error', msg);
   }
-
-  btn.disabled = false;
-  btn.textContent = 'Solicitar acceso';
+  btn.disabled = false; btn.textContent = 'Solicitar acceso';
 }
 
-// Si ya está logueado y aprobado, redirigir directo
+// ---- OLVIDÉ CONTRASEÑA ----
+async function doForgot() {
+  const email = document.getElementById('forgot-email').value.trim();
+  const btn = document.getElementById('btn-forgot');
+  if (!email) { showMsg('forgot-msg','error','Ingresá tu email.'); return; }
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  try {
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/login.html'
+    });
+    if (error) throw error;
+    showMsg('forgot-msg', 'success', '✓ Si ese email existe, recibirás un link en los próximos minutos. Revisá también la carpeta de spam.');
+    document.getElementById('forgot-email').value = '';
+  } catch (err) {
+    showMsg('forgot-msg', 'error', 'Error al enviar el email. Intentá de nuevo.');
+  }
+  btn.disabled = false; btn.textContent = 'Enviar link de recuperación';
+}
+
+// ---- NUEVA CONTRASEÑA (cuando vuelven del link) ----
+async function doReset() {
+  const password = document.getElementById('reset-password').value;
+  const password2 = document.getElementById('reset-password2').value;
+  const btn = document.getElementById('btn-reset');
+  if (!password) { showMsg('reset-msg','error','Ingresá una contraseña.'); return; }
+  if (password !== password2) { showMsg('reset-msg','error','Las contraseñas no coinciden.'); return; }
+  if (password.length < 6) { showMsg('reset-msg','error','La contraseña debe tener al menos 6 caracteres.'); return; }
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  try {
+    const { error } = await supabaseClient.auth.updateUser({ password });
+    if (error) throw error;
+    showMsg('reset-msg', 'success', '✓ Contraseña actualizada. Redirigiendo...');
+    setTimeout(() => window.location.href = 'index.html', 2000);
+  } catch (err) {
+    showMsg('reset-msg', 'error', 'Error al actualizar. El link puede haber expirado.');
+    btn.disabled = false; btn.textContent = 'Guardar nueva contraseña';
+  }
+}
+
+// ---- INIT ----
 window.addEventListener('DOMContentLoaded', async () => {
+  // Detectar si vienen de un link de recuperación
+  const hash = window.location.hash;
+  if (hash.includes('type=recovery')) {
+    // Supabase maneja el token automáticamente con la sesión
+    showScreen('screen-reset');
+    return;
+  }
+
+  // Si ya está logueado y aprobado, ir directo al dashboard
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session) {
     const { data: access } = await supabaseClient
-      .from('user_access')
-      .select('approved')
-      .eq('email', session.user.email)
-      .single();
+      .from('user_access').select('approved').eq('email', session.user.email).single();
     if (access?.approved) window.location.href = 'index.html';
   }
 });
 </script>
 </body>
 </html>
+
