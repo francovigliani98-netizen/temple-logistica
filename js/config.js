@@ -3,3 +3,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const ADMIN_PASSWORD = 'temple2024';
 const { createClient } = supabase;
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Ping automático cada 3 días para evitar que Supabase se pause
+if (!localStorage.getItem('lastPing') || Date.now() - localStorage.getItem('lastPing') > 259200000) {
+  supabaseClient.from('uploads').select('id').limit(1).then(() => localStorage.setItem('lastPing', Date.now()));
+}
