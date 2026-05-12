@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Temple Brewery Logística</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body style="background:var(--bg)">
+
+<div id="login-section" style="display:none">
+  <div class="admin-login">
+    <div style="font-size:32px;margin-bottom:16px">🔐</div>
+    <h2>Panel de Administración</h2>
+    <p>Ingresá la contraseña para acceder</p>
+    <input type="password" id="admin-pw" placeholder="Contraseña" onkeydown="if(event.key==='Enter')login()">
+    <div id="login-error" style="color:var(--red);font-size:13px;margin-bottom:12px;min-height:18px"></div>
+    <button class="btn btn-primary" onclick="login()" style="width:100%">Ingresar</button>
+    <div style="margin-top:16px"><a href="index.html" style="font-size:13px;color:var(--text3)">← Volver al dashboard</a></div>
+  </div>
+</div>
+
+<div id="admin-panel" style="display:none">
+  <div style="background:var(--navy);padding:14px 24px;display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <span style="color:#fff;font-weight:700;font-size:15px">Temple Brewery</span>
+      <span style="color:rgba(255,255,255,0.45);font-size:13px;margin-left:10px">Panel de Admin</span>
+    </div>
+    <div style="display:flex;gap:12px;align-items:center">
+      <a href="index.html" style="color:rgba(255,255,255,0.65);font-size:13px;text-decoration:none">← Ver dashboard</a>
+      <button class="btn btn-secondary" onclick="logout()" style="font-size:12px;padding:6px 14px">Cerrar sesión</button>
+    </div>
+  </div>
+
+  <div class="admin-container">
+
+    <!-- USUARIOS -->
+    <div class="history-section" style="margin-top:32px">
+      <h3>👥 Gestión de accesos</h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Aprobá o rechazá solicitudes de acceso al dashboard.</p>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+        <input type="email" id="new-user-email" placeholder="email@empresa.com" style="flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;outline:none">
+        <button class="btn btn-primary" onclick="addUser()" style="white-space:nowrap">+ Agregar y aprobar</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Email</th><th>Estado</th><th>Solicitud</th><th>Acciones</th></tr></thead>
+          <tbody id="users-tbody"><tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text3)">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+      <div id="users-msg" style="display:none"></div>
+    </div>
+
+    <!-- PRECIOS DE VENTA (FIX 2) -->
+    <div class="upload-section">
+      <h3>💰 Precios de venta por caja</h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Actualizá los precios cuando cambien. El simulador y la tabla de mínimos se actualizan automáticamente.</p>
+      <div id="precios-grid" style="display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:16px">
+        <!-- se llena dinámicamente -->
+      </div>
+      <button class="btn btn-primary" onclick="savePrecios()">Guardar precios</button>
+      <div id="precios-msg" style="display:none;margin-top:12px"></div>
+    </div>
+
+    <!-- UPLOAD -->
+    <div class="upload-section">
+      <h3>📤 Cargar nuevos datos</h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Los pedidos nuevos se agregan a los existentes. Los que ya están se actualizan si cambiaron.</p>
+      <div class="upload-row-admin">
+        <label class="upload-btn-admin" id="btn-fact">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span>Facturación Klozer</span>
+          <small id="fact-name">Ningún archivo seleccionado</small>
+          <input type="file" id="file-fact-admin" accept=".xlsx,.csv" style="display:none" onchange="loadFile(this,'fact')">
+        </label>
+        <label class="upload-btn-admin" id="btn-ped">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <span>Reporte de pedidos</span>
+          <small id="ped-name">Ningún archivo seleccionado</small>
+          <input type="file" id="file-ped-admin" accept=".xlsx,.csv" style="display:none" onchange="loadFile(this,'ped')">
+        </label>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      <div id="upload-status" style="display:none"></div>
+      <div style="margin-top:16px">
+        <button class="btn btn-primary" id="btn-upload" onclick="uploadData()" disabled>Subir a la nube</button>
+      </div>
+    </div>
+
+    <!-- HISTORIAL -->
+    <div class="history-section">
+      <h3>📋 Historial de cargas</h3>
+      <div id="total-count" style="font-size:13px;color:var(--text2);margin-bottom:16px"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Fecha y hora</th><th class="num-right">Total pedidos</th><th class="num-right">Nuevos</th><th class="num-right">Actualizados</th></tr></thead>
+          <tbody id="history-tbody"><tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text3)">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- DANGER ZONE -->
+    <div style="background:var(--surface);border:1px solid #fca5a5;border-radius:var(--radius-lg);padding:24px;margin-bottom:40px">
+      <h3 style="font-size:15px;font-weight:600;color:var(--red);margin-bottom:8px">⚠ Zona peligrosa</h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Borrar todos los datos de la base. Esta acción no se puede deshacer.</p>
+      <button class="btn btn-danger" onclick="clearAllData()">Borrar todos los datos</button>
+    </div>
+
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/admin.js"></script>
+<script>
+// ---- PRECIOS (FIX 2) ----
+const PRODUCTOS_DEFAULT = {
+  'Cerveza':            { precio: 13821, margen: 0.35, litros: 7  },
+  'Vermú 750ml':        { precio: 52290, margen: 0.50, litros: 9  },
+  'Gin 500ml':          { precio: 54390, margen: 0.55, litros: 6  },
+  'Gin 750ml':          { precio: 81585, margen: 0.55, litros: 9  },
+  'Alta Montaña 750ml': { precio: 122378,margen: 0.60, litros: 9  },
+};
+
+async function loadPrecios() {
+  let dbData = [];
+  try {
+    const {data} = await supabaseClient.from('precios').select('*');
+    dbData = data || [];
+  } catch(e) {}
+
+  const grid = document.getElementById('precios-grid');
+  grid.innerHTML = Object.entries(PRODUCTOS_DEFAULT).map(([nombre, def]) => {
+    const guardado = dbData.find(p => p.producto === nombre);
+    const precio   = guardado?.precio   ?? def.precio;
+    const margen   = guardado?.margen   ?? def.margen;
+    const litros   = guardado?.litros_caja ?? def.litros;
+    const slug     = nombre.replace(/\s+/g, '-');
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em">${nombre}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Precio por caja ($)</div>
+          <input type="number" id="precio-${slug}" value="${precio}"
+            style="width:100%;padding:7px 9px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;font-weight:600;outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Margen bruto (%)</div>
+          <input type="number" id="margen-${slug}" value="${Math.round(margen*100)}" min="0" max="100" step="1"
+            style="width:100%;padding:7px 9px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;font-weight:600;outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Litros por caja</div>
+          <input type="number" id="litros-${slug}" value="${litros}" min="1" step="0.5"
+            style="width:100%;padding:7px 9px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;font-weight:600;outline:none;box-sizing:border-box">
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function savePrecios() {
+  const rows = Object.entries(PRODUCTOS_DEFAULT).map(([nombre, def]) => {
+    const slug = nombre.replace(/\s+/g, '-');
+    const margenPct = parseFloat(document.getElementById('margen-'+slug)?.value);
+    return {
+      producto:    nombre,
+      precio:      parseFloat(document.getElementById('precio-'+slug)?.value) || def.precio,
+      margen:      isNaN(margenPct) ? def.margen : margenPct / 100,
+      litros_caja: parseFloat(document.getElementById('litros-'+slug)?.value) || def.litros,
+    };
+  });
+  const {error} = await supabaseClient.from('precios').upsert(rows, {onConflict:'producto'});
+  const msg = document.getElementById('precios-msg');
+  if(!error) {
+    msg.className='status-msg success'; msg.textContent='✓ Precios actualizados correctamente.';
+  } else {
+    msg.className='status-msg error'; msg.textContent='Error: '+error.message;
+  }
+  msg.style.display='block';
+  setTimeout(()=>msg.style.display='none', 4000);
+}
+
+// ---- USUARIOS ----
+async function loadUsers() {
+  const {data,error} = await supabaseClient.from('user_access').select('*').order('created_at',{ascending:false});
+  const tbody = document.getElementById('users-tbody');
+  if(error||!data?.length){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text3)">Sin solicitudes todavía</td></tr>';return;}
+  tbody.innerHTML=data.map(u=>{
+    const fecha=new Date(u.created_at).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const badge=u.approved?'<span class="badge green">Aprobado</span>':'<span class="badge amber">Pendiente</span>';
+    const actions=u.approved
+      ?`<button class="btn btn-secondary" onclick="revokeUser('${u.email}')" style="font-size:11px;padding:4px 10px">Revocar</button>`
+      :`<button class="btn btn-primary" onclick="approveUser('${u.email}')" style="font-size:11px;padding:4px 10px">Aprobar</button>
+        <button class="btn btn-danger" onclick="deleteUser('${u.email}')" style="font-size:11px;padding:4px 10px;margin-left:4px">Rechazar</button>`;
+    return `<tr><td>${u.email}</td><td>${badge}</td><td>${fecha}</td><td>${actions}</td></tr>`;
+  }).join('');
+}
+
+async function approveUser(email){
+  const{error}=await supabaseClient.from('user_access').update({approved:true,approved_at:new Date().toISOString()}).eq('email',email);
+  if(!error){showUsersMsg('success',`✓ ${email} aprobado.`);loadUsers();}
+  else showUsersMsg('error','Error: '+error.message);
+}
+async function revokeUser(email){
+  if(!confirm(`¿Revocar acceso a ${email}?`))return;
+  const{error}=await supabaseClient.from('user_access').update({approved:false}).eq('email',email);
+  if(!error){showUsersMsg('success',`Acceso revocado.`);loadUsers();}
+}
+async function deleteUser(email){
+  if(!confirm(`¿Rechazar solicitud de ${email}?`))return;
+  const{error}=await supabaseClient.from('user_access').delete().eq('email',email);
+  if(!error){showUsersMsg('success','Solicitud eliminada.');loadUsers();}
+}
+async function addUser(){
+  const email=document.getElementById('new-user-email').value.trim();if(!email)return;
+  const{error}=await supabaseClient.from('user_access').upsert({email,approved:true,approved_at:new Date().toISOString()},{onConflict:'email'});
+  if(!error){showUsersMsg('success',`✓ ${email} agregado y aprobado.`);document.getElementById('new-user-email').value='';loadUsers();}
+  else showUsersMsg('error','Error: '+error.message);
+}
+function showUsersMsg(type,text){
+  const el=document.getElementById('users-msg');
+  el.className='status-msg '+type;el.textContent=text;el.style.display='block';
+  setTimeout(()=>el.style.display='none',4000);
+}
+
+// Override showPanel
+const _origShowPanel = showPanel;
+function showPanel(){
+  document.getElementById('login-section').style.display='none';
+  document.getElementById('admin-panel').style.display='block';
+  loadUploadHistory();
+  loadUsers();
+  loadPrecios();
+}
+</script>
+</body>
+</html>
