@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tablero Logístico — Temple Brewery</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="css/styles.css">
+<style>
+.sim-products-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.sim-product-row{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)}
+.sim-product-name{font-size:12px;font-weight:600;color:var(--text)}
+.sim-product-price{font-size:11px;color:var(--text3)}
+.sim-qty-input{width:64px;padding:6px 8px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;text-align:center;outline:none}
+.sim-qty-input:focus{border-color:var(--blue)}
+.sim-manual-row{display:flex;gap:10px;padding:10px 12px;background:var(--surface2);border-radius:var(--radius);border:1px dashed var(--border2);margin-bottom:16px;align-items:center;flex-wrap:wrap}
+.sim-manual-row label{font-size:12px;color:var(--text2);white-space:nowrap}
+.sim-manual-row input{flex:1;min-width:100px;padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;outline:none}
+.sim-productos-detalle{font-size:11px;color:var(--text2);background:var(--surface2);padding:6px 10px;border-radius:var(--radius);margin-bottom:10px}
+th[data-sort]{cursor:pointer;user-select:none}
+th[data-sort]:hover{background:var(--border2)}
+.sort-icon{margin-left:4px;color:var(--text3);font-size:10px}
+.tarifario-wrap{overflow-x:auto;margin-top:16px}
+.tarifario-wrap table{font-size:11px}
+.tarifario-wrap th{font-size:10px;padding:6px 8px}
+.tarifario-wrap td{padding:6px 8px}
+
+/* Opción 3: delta chips en KPIs */
+.kpi-delta{display:inline-block;font-size:11px;font-weight:600;margin-top:4px;padding:2px 6px;border-radius:4px}
+.kpi-delta.green{color:#15803d;background:rgba(22,163,74,0.1)}
+.kpi-delta.red{color:#b91c1c;background:rgba(220,38,38,0.1)}
+.kpi-delta.neutral{color:var(--text3);background:transparent;font-weight:400}
+
+/* Comparador */
+.cmp-selectors{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:20px}
+.cmp-selectors label{font-size:12px;font-weight:600;color:var(--text2)}
+.cmp-selectors select{padding:7px 12px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;background:var(--bg);color:var(--text);outline:none;min-width:160px}
+.cmp-vs{font-size:13px;font-weight:700;color:var(--text3);padding:0 4px}
+.cmp-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
+@media(max-width:700px){.cmp-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text">Cargando datos...</div>
+</div>
+<div id="error-banner" style="display:none;position:fixed;top:0;left:0;right:0;background:var(--red);color:#fff;padding:12px 24px;text-align:center;font-size:13px;z-index:999;"></div>
+
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="brand">Temple Brewery</div>
+    <div class="sub">Tablero Logístico</div>
+  </div>
+  <div class="nav-section">Vistas</div>
+  <div class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    <span>Resumen</span>
+  </div>
+  <div class="nav-item" data-page="costos" onclick="switchPage('costos',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+    <span>Costos</span>
+  </div>
+  <div class="nav-item" data-page="clientes" onclick="switchPage('clientes',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    <span>Clientes</span>
+  </div>
+  <div class="nav-item" data-page="servicio" onclick="switchPage('servicio',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    <span>Servicio</span>
+  </div>
+  <div class="nav-item" data-page="comparador" onclick="switchPage('comparador',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    <span>Comparador</span>
+  </div>
+  <div class="nav-item" data-page="pedidos" onclick="switchPage('pedidos',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    <span>Pedidos</span>
+  </div>
+  <div class="nav-item" data-page="simulador" onclick="switchPage('simulador',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+    <span>Simulador</span>
+  </div>
+  <div class="sidebar-bottom">
+    <a class="admin-link" href="admin.html"><span>⚙ Panel Admin</span></a>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="page-title">Resumen</div>
+    <div class="topbar-right">
+      <span class="period-chip" id="total-pedidos-chip"></span>
+      <span class="period-chip" id="period-chip">Cargando...</span>
+      <select id="filter-mes" style="font-size:12px;padding:5px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text)" onchange="applyGlobalFilter()">
+        <option value="">Todos los meses</option>
+      </select>
+      <span id="user-email" style="font-size:12px;color:var(--text3);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <button onclick="doLogout()" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text2);cursor:pointer">Salir</button>
+    </div>
+  </div>
+
+  <div id="empty-state" style="display:none;min-height:70vh;align-items:center;justify-content:center">
+    <div style="text-align:center;padding:40px">
+      <div style="font-size:48px;margin-bottom:16px">📦</div>
+      <h2 style="font-size:20px;font-weight:600;margin-bottom:8px">Sin datos todavía</h2>
+      <p style="color:var(--text2);margin-bottom:20px">El admin todavía no cargó ningún archivo.</p>
+      <a href="admin.html" style="color:var(--blue);text-decoration:underline;font-size:14px">Ir al panel admin →</a>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="page active" id="page-dashboard">
+    <div id="kpi-grid" class="kpi-grid"></div>
+    <div class="charts-row charts-2">
+      <div class="chart-card"><h3>Gasto mensual</h3><div class="chart-sub">Total facturado por período</div><div class="chart-wrap"><canvas id="c-mensual"></canvas></div></div>
+      <div class="chart-card"><h3>Semáforo logístico</h3><div class="chart-sub">Distribución % logístico s/ valor mercadería</div><div class="chart-wrap"><canvas id="c-semaforo"></canvas></div></div>
+    </div>
+    <div class="charts-row charts-2">
+      <div class="chart-card"><h3>Gasto por región</h3><div class="chart-sub">Top regiones por volumen de gasto</div><div class="chart-wrap tall"><canvas id="c-region"></canvas></div></div>
+      <div class="chart-card"><h3>% logístico por tamaño de pedido</h3><div class="chart-sub">A menor cantidad de cajas, mayor % logístico</div><div class="chart-wrap tall"><canvas id="c-cajas"></canvas></div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:16px" id="c-mix-productos-wrap" style="display:none">
+      <div class="chart-card">
+        <h3>Mix de productos por mes</h3>
+        <div class="chart-sub">Cajas despachadas por producto · Barras apiladas — requiere haber subido el Reporte de Pedidos al admin</div>
+        <div class="chart-wrap" style="height:300px"><canvas id="c-mix-productos"></canvas></div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:16px">
+      <div class="chart-card">
+        <h3>Incidencia logística por mes</h3>
+        <div class="chart-sub">Pedidos por semáforo (barras) · % logístico promedio (línea) — Si la línea sube, el mix de producto o tamaño de pedido empeoró</div>
+        <div class="chart-wrap" style="height:280px"><canvas id="c-pct-tendencia"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COSTOS -->
+  <div class="page" id="page-costos">
+    <div class="charts-row charts-2">
+      <div class="chart-card"><h3>% logístico por producto</h3><div class="chart-sub">Promedio por categoría</div><div class="chart-wrap tall"><canvas id="c-producto"></canvas></div></div>
+      <div class="chart-card"><h3>Gasto acumulado en el año</h3><div class="chart-sub">Evolución mensual acumulada</div><div class="chart-wrap tall"><canvas id="c-acumulado"></canvas></div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:16px">
+      <div class="chart-card">
+        <h3>Volumen de entregas y costo promedio por zona</h3>
+        <div class="chart-sub">Barras: cantidad de entregas · Línea: costo promedio por pedido</div>
+        <div class="chart-wrap" style="height:300px"><canvas id="c-zona-volumen"></canvas></div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="section-header"><h2>% logístico real por zona y tamaño de pedido</h2><span class="desc">Promedio histórico de tus pedidos · Verde &lt;8% · Amarillo 8-15% · Rojo &gt;15% · "n ped" = cantidad de pedidos en ese cruce</span></div>
+    <div class="table-card">
+      <div class="table-wrap"><table><thead><tr>
+        <th>Zona</th>
+        <th class="num-right">1 caja</th>
+        <th class="num-right">2-3</th>
+        <th class="num-right">4-6</th>
+        <th class="num-right">7-10</th>
+        <th class="num-right">11-20</th>
+        <th class="num-right">21-30</th>
+        <th class="num-right">31+</th>
+      </tr></thead><tbody id="thresh-tbody"></tbody></table></div>
+    </div>
+    <div class="divider"></div>
+    <div class="section-header"><h2>Presupuesto vs. real</h2><span class="desc">Ingresá el presupuesto mensual para ver el desvío</span></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;max-width:500px">
+      <div class="budget-row"><label>Presupuesto mensual</label><input type="number" id="budget-input" placeholder="ej: 4500000" oninput="calcBudget()"></div>
+      <div id="budget-result" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px">
+          <div class="kpi-card"><div class="label">Presupuesto</div><div class="value" style="color:var(--blue)" id="b-pres">-</div></div>
+          <div class="kpi-card"><div class="label">Real promedio</div><div class="value" id="b-real">-</div></div>
+          <div class="kpi-card"><div class="label">Desvío</div><div class="value" id="b-desv">-</div><div class="sub" id="b-desv-pct"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLIENTES -->
+  <div class="page" id="page-clientes">
+    <div class="charts-row charts-2">
+      <div class="rank-card"><h3>Top 10 clientes por gasto logístico</h3><div id="rank-gasto"></div></div>
+      <div class="rank-card"><h3>Clientes con % logístico más alto</h3><div id="rank-pctlog"></div></div>
+    </div>
+    <div class="divider"></div>
+    <div class="section-header"><h2>Clientes en zona roja</h2><span class="desc">Pedidos consistentemente por encima del 15%</span></div>
+    <div class="table-card">
+      <div class="table-header"><h3>Clientes con más pedidos rojos</h3></div>
+      <div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Pedidos totales</th><th>Pedidos rojos</th><th>% en rojo</th><th>Cajas prom.</th><th>% logístico prom.</th><th>Región</th></tr></thead><tbody id="clientes-rojos-tbody"></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- SERVICIO -->
+  <div class="page" id="page-servicio">
+    <div class="kpi-grid" id="kpi-servicio"></div>
+    <div class="charts-row charts-2">
+      <div class="chart-card"><h3>OTIF por mes</h3><div class="chart-sub">Evolución del nivel de servicio · Meta &gt;85%</div><div class="chart-wrap"><canvas id="c-otif"></canvas></div></div>
+      <div class="chart-card"><h3>Incidencias por tipo</h3><div class="chart-sub">Cantidad por tipo de problema</div><div class="chart-wrap"><canvas id="c-incidencias"></canvas></div></div>
+    </div>
+    <div class="divider"></div>
+    <div class="section-header"><h2>Preparación interna vs. Klozer</h2><span class="desc">Días promedio en cada etapa</span></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px"><div id="comp-tiempos"></div></div>
+  </div>
+
+  <!-- COMPARADOR (Opción 2) -->
+  <div class="page" id="page-comparador">
+    <div class="cmp-selectors">
+      <label>Mes A</label>
+      <select id="cmp-mes-a" onchange="renderComparador()"><option value="">Seleccionar...</option></select>
+      <span class="cmp-vs">vs</span>
+      <label>Mes B</label>
+      <select id="cmp-mes-b" onchange="renderComparador()"><option value="">Seleccionar...</option></select>
+      <span style="font-size:12px;color:var(--text3);margin-left:8px">Los dos últimos meses se pre-seleccionan automáticamente</span>
+    </div>
+    <div id="cmp-panel" style="display:none">
+      <div class="cmp-grid">
+        <!-- Tabla de métricas -->
+        <div class="table-card">
+          <div class="table-header"><h3>Métricas comparadas</h3></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Métrica</th>
+                  <th class="num-right" id="cmp-header-a">Mes A</th>
+                  <th class="num-right" id="cmp-header-b">Mes B</th>
+                  <th class="num-right">Variación</th>
+                </tr>
+              </thead>
+              <tbody id="cmp-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <!-- Radar chart -->
+        <div class="chart-card">
+          <h3>Radar comparativo</h3>
+          <div class="chart-sub">Vista radial de las principales métricas normalizadas — más área = mejor performance general</div>
+          <div class="chart-wrap" style="height:320px"><canvas id="c-radar-cmp"></canvas></div>
+        </div>
+      </div>
+    </div>
+    <div id="cmp-empty" style="text-align:center;padding:60px;color:var(--text3);font-size:14px">Seleccioná dos meses para comparar</div>
+  </div>
+
+  <!-- PEDIDOS -->
+  <div class="page" id="page-pedidos">
+    <div class="table-card">
+      <div class="table-header">
+        <h3>Todos los pedidos</h3>
+        <div class="filters">
+          <select id="f-region" onchange="renderTable()"><option value="">Todas las regiones</option></select>
+          <select id="f-semaforo" onchange="renderTable()">
+            <option value="">Todos</option>
+            <option value="verde">Verde (&lt;8%)</option>
+            <option value="amarillo">Amarillo (8-15%)</option>
+            <option value="rojo">Rojo (&gt;15%)</option>
+          </select>
+          <select id="f-estado" onchange="renderTable()">
+            <option value="">Todos los estados</option>
+            <option value="Entregado">Entregado</option>
+            <option value="Devuelto">Devuelto</option>
+            <option value="Eliminado">Eliminado</option>
+          </select>
+          <select id="f-orden" onchange="renderTable()" style="font-size:12px;padding:5px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text)">
+            <option value="">Más reciente primero</option>
+            <option value="asc">Más antiguo primero</option>
+            <option value="pct_desc">Mayor % logístico</option>
+            <option value="pct_asc">Menor % logístico</option>
+            <option value="cajas_desc">Más cajas</option>
+            <option value="total_desc">Mayor gasto</option>
+          </select>
+          <input type="text" id="f-search" placeholder="Buscar cliente..." oninput="renderTable()" style="width:160px">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th data-sort="pid" onclick="sortTable('pid')">Pedido <span class="sort-icon">↕</span></th>
+            <th data-sort="fecha" onclick="sortTable('fecha')">Fecha <span class="sort-icon">↓</span></th>
+            <th>Mes</th><th>Cliente</th><th>Región</th>
+            <th class="num-right" data-sort="cajas" onclick="sortTable('cajas')">Cajas <span class="sort-icon">↕</span></th>
+            <th class="num-right">Valor decl.</th>
+            <th class="num-right" data-sort="total" onclick="sortTable('total')">Total flete <span class="sort-icon">↕</span></th>
+            <th data-sort="pct_log" onclick="sortTable('pct_log')">% Logístico <span class="sort-icon">↕</span></th>
+            <th>OTIF</th><th class="num-right">Días Klozer</th><th>Estado</th>
+          </tr></thead>
+          <tbody id="main-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-header">
+      <h2>Top 20 pedidos con mayor costo logístico</h2>
+      <span class="desc">Los pedidos más caros del filtro actual y la razón principal del costo elevado</span>
+    </div>
+    <div class="table-card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th style="width:40px">#</th>
+            <th>Pedido</th>
+            <th>Cliente</th>
+            <th>Región</th>
+            <th class="num-right">Cajas</th>
+            <th class="num-right">Costo logístico</th>
+            <th>% Log</th>
+            <th>¿Por qué fue caro?</th>
+          </tr></thead>
+          <tbody id="ranking-pedidos-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIMULADOR -->
+  <div class="page" id="page-simulador">
+    <div class="alert blue">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>Cargá los productos del pedido y la zona de destino para calcular el costo logístico exacto.</div>
+    </div>
+    <div class="sim-grid">
+      <div class="sim-input-card">
+        <h3>Datos del pedido</h3>
+        <div class="form-group">
+          <label>Código postal del destino</label>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:grid;grid-template-columns:130px auto;gap:8px;align-items:center">
+              <input type="number" id="sim-cp-input" placeholder="Ej: 5000" min="1000" max="9999"
+                style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text1);width:100%;box-sizing:border-box"
+                onkeydown="if(event.key==='Enter')buscarCP()">
+              <button onclick="buscarCP()" style="padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;width:100%">Buscar</button>
+            </div>
+            <span id="sim-cp-badge" style="display:none;font-size:12px;font-weight:500"></span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Zona de destino</label>
+          <select id="sim-region" onchange="calcSim()">
+            <option value="">Seleccionar zona...</option>
+            <option value="Local - CABA">Local - CABA</option>
+            <option value="GBA">GBA</option>
+            <option value="Centro (capitales)">Centro (capitales)</option>
+            <option value="Centro (interior)">Centro (interior)</option>
+            <option value="Cuyo (capitales)">Cuyo (capitales)</option>
+            <option value="Cuyo (interior)">Cuyo (interior)</option>
+            <option value="NEA/NOA (capitales)">NEA/NOA (capitales)</option>
+            <option value="NEA/NOA (interior)">NEA/NOA (interior)</option>
+            <option value="Patagonia (capitales)">Patagonia (capitales)</option>
+            <option value="Patagonia (interior)">Patagonia (interior)</option>
+            <option value="Santa Cruz y TDF">Santa Cruz y TDF</option>
+          </select>
+        </div>
+        <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+          <span>Productos del pedido</span>
+          <button type="button" onclick="agregarFilaSim()"
+            style="font-size:12px;padding:6px 12px;background:var(--accent,var(--blue));color:#fff;border:none;border-radius:var(--radius);font-weight:600;cursor:pointer;text-transform:none;letter-spacing:0">
+            + Agregar producto
+          </button>
+        </div>
+        <div style="overflow-x:auto;margin-bottom:16px;border:1px solid var(--border);border-radius:var(--radius)">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead style="background:var(--surface2)">
+              <tr>
+                <th style="text-align:left;padding:8px 6px;font-size:10px;text-transform:uppercase;color:var(--text3);font-weight:600">Producto</th>
+                <th style="text-align:center;padding:8px 6px;font-size:10px;text-transform:uppercase;color:var(--text3);font-weight:600;width:90px">Unidades</th>
+                <th style="text-align:center;padding:8px 6px;font-size:10px;text-transform:uppercase;color:var(--text3);font-weight:600;width:100px">% Desc</th>
+                <th style="text-align:right;padding:8px 6px;font-size:10px;text-transform:uppercase;color:var(--text3);font-weight:600;width:110px">Subtotal</th>
+                <th style="width:40px"></th>
+              </tr>
+            </thead>
+            <tbody id="sim-rows-tbody"></tbody>
+          </table>
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:8px">¿Otro producto? Ingresá manualmente:</div>
+        <div class="sim-manual-row">
+          <label>Cajas:</label><input type="number" id="sim-cajas-manual" min="0" placeholder="0" oninput="calcSim()" style="width:70px;flex:none">
+          <label>Valor $:</label><input type="number" id="sim-valor-manual" min="0" placeholder="ej: 150000" oninput="calcSim()">
+        </div>
+      </div>
+      <div class="sim-result-card">
+        <h3>Resultado</h3>
+        <div id="sim-result-empty" style="text-align:center;padding:40px;color:var(--text3);font-size:13px">Seleccioná una zona y cargá al menos un producto</div>
+        <div id="sim-result-content" style="display:none">
+          <div class="result-big" id="sim-verdict-box">
+            <div class="result-verdict" id="sim-verdict-text"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
+              <div style="text-align:center;padding:8px;background:rgba(255,255,255,0.5);border-radius:6px">
+                <div class="result-pct" id="sim-pct-val" style="font-size:24px"></div>
+                <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">s/ precio lista</div>
+              </div>
+              <div style="text-align:center;padding:8px;background:rgba(255,255,255,0.5);border-radius:6px">
+                <div class="result-pct" id="sim-pct-val-desc" style="font-size:24px"></div>
+                <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">s/ precio con desc.</div>
+              </div>
+            </div>
+          </div>
+          <div id="sim-productos-detalle" class="sim-productos-detalle" style="display:none"></div>
+          <div class="result-rows">
+            <div class="result-row"><span class="r-label">Total cajas</span><span class="r-val" id="sim-total-cajas"></span></div>
+            <div class="result-row"><span class="r-label">Valor lista</span><span class="r-val" id="sim-valor-mercaderia"></span></div>
+            <div class="result-row" id="sim-row-descuento" style="display:none"><span class="r-label">Descuento total</span><span class="r-val" id="sim-descuento-total" style="color:var(--red)"></span></div>
+            <div class="result-row" id="sim-row-valor-final" style="display:none"><span class="r-label">Valor con descuento</span><span class="r-val" id="sim-valor-final"></span></div>
+            <div class="result-row"><span class="r-label">Costo flete</span><span class="r-val" id="sim-costo-flete"></span></div>
+            <div class="result-row"><span class="r-label">Seguro (1,2%)</span><span class="r-val" id="sim-seguro"></span></div>
+            <div class="result-row"><span class="r-label">Total logístico</span><span class="r-val" id="sim-total-log"></span></div>
+            <div class="result-row"><span class="r-label">Costo por caja</span><span class="r-val" id="sim-costo-caja"></span></div>
+          </div>
+          <div class="threshold-info" id="sim-threshold-msg"></div>
+        </div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="section-header"><h2>% logístico real por zona y tamaño de pedido</h2><span class="desc">Tu historial: promedio real por combinación zona/cajas · Te dice qué pasa cuando mandás X cajas a Y zona</span></div>
+    <div class="table-card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Zona</th>
+            <th class="num-right">1 caja</th>
+            <th class="num-right">2-3</th>
+            <th class="num-right">4-6</th>
+            <th class="num-right">7-10</th>
+            <th class="num-right">11-20</th>
+            <th class="num-right">21-30</th>
+            <th class="num-right">31+</th>
+          </tr></thead>
+          <tbody id="sim-thresh-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="section-header"><h2>Tarifario Klozer</h2><span class="desc">Costo por caja según zona y cantidad — Tarifa vigente</span></div>
+    <div class="table-card">
+      <div class="tarifario-wrap">
+        <table>
+          <thead><tr>
+            <th>Zona</th><th class="num-right">1 caja</th><th class="num-right">2-3 cajas</th>
+            <th class="num-right">4-6 cajas</th><th class="num-right">7-10 cajas</th>
+            <th class="num-right">11-20 cajas</th><th class="num-right">21-30 cajas</th>
+            <th class="num-right">Pallet x1</th><th class="num-right">Pallet x2</th>
+          </tr></thead>
+          <tbody id="tarifario-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/dashboard.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const sel = document.getElementById('f-orden');
+    if (sel) sel.addEventListener('change', () => {
+      const v = sel.value;
+      if (!v || v === '') { sortCol='fecha'; sortDir='desc'; }
+      else if (v === 'asc') { sortCol='fecha'; sortDir='asc'; }
+      else if (v === 'pct_desc') { sortCol='pct_log'; sortDir='desc'; }
+      else if (v === 'pct_asc') { sortCol='pct_log'; sortDir='asc'; }
+      else if (v === 'cajas_desc') { sortCol='cajas'; sortDir='desc'; }
+      else if (v === 'total_desc') { sortCol='total'; sortDir='desc'; }
+      renderTable();
+    });
+  });
+</script>
+</body>
+</html>
