@@ -471,6 +471,37 @@ function renderAlertas(m,p,mes,mesAnt){
     }
   }
 
+  // 7. Clientes recurrentes en zona roja
+  const rojosClientes={};
+  filteredRows.filter(r=>r.semaforo==='rojo'&&(r.razon_social||r.dest)).forEach(r=>{
+    const k=r.razon_social||r.dest;
+    rojosClientes[k]=(rojosClientes[k]||0)+1;
+  });
+  const clientesRojos=Object.entries(rojosClientes).filter(([,n])=>n>=2).sort((a,b)=>b[1]-a[1]);
+  if(clientesRojos.length>0){
+    const top3=clientesRojos.slice(0,3).map(([c,n])=>`<strong>${c}</strong> (${n} pedidos)`).join(', ');
+    alertas.push({
+      tipo:'red',
+      icon:'🔁',
+      titulo:`${clientesRojos.length} cliente${clientesRojos.length>1?'s':''} con pedidos rojos recurrentes`,
+      detalle:`${top3}. Estos clientes tienen múltiples envíos con más del 15% logístico. Revisar condiciones de venta.`
+    });
+  }
+
+  // 8. Pedido individual de alto impacto
+  if(m.total>0){
+    const topPedido=filteredRows.filter(r=>r.total).sort((a,b)=>(b.total||0)-(a.total||0))[0];
+    if(topPedido&&topPedido.total/m.total>0.10){
+      const pct=((topPedido.total/m.total)*100).toFixed(0);
+      alertas.push({
+        tipo:'amber',
+        icon:'🎯',
+        titulo:`Pedido ${topPedido.pid} concentra el ${pct}% del gasto`,
+        detalle:`${topPedido.razon_social||topPedido.dest||''} · ${topPedido.region||''} · ${peso(topPedido.total)}. Un solo pedido tiene alto impacto en el total del período.`
+      });
+    }
+  }
+
   if(alertas.length===0){
     cont.innerHTML=`<div style="padding:16px;background:rgba(22,163,74,0.05);border:1px solid rgba(22,163,74,0.2);border-radius:var(--radius);color:var(--green);font-size:13px;display:flex;align-items:center;gap:10px">
       <span style="font-size:18px">✅</span>
@@ -1155,6 +1186,45 @@ function renderTable(){
     <td><span class="badge ${r.estado==='Entregado'?'green':r.estado==='Devuelto'?'red':r.estado?'amber':'gray'}">${r.estado||'-'}</span></td></tr>`).join('')||
     '<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--text3)">Sin resultados</td></tr>';
   renderRankingPedidos(filtered);
+}
+
+// ---- EXPORTAR PEDIDOS A EXCEL ----
+function exportPedidos(){
+  const mes=document.getElementById('filter-mes').value;
+  const reg=document.getElementById('f-region')?.value||'';
+  const sem=document.getElementById('f-semaforo')?.value||'';
+  const est=document.getElementById('f-estado')?.value||'';
+  const srch=(document.getElementById('f-search')?.value||'').toLowerCase();
+  const rows=allRows.filter(r=>(!mes||r.mes===mes)&&(!reg||r.region===reg)&&(!sem||r.semaforo===sem)&&(!est||r.estado===est)&&(!srch||(r.dest||'').toLowerCase().includes(srch)||(r.razon_social||'').toLowerCase().includes(srch)));
+  if(!rows.length){alert('No hay pedidos para exportar con los filtros actuales.');return;}
+  const data=rows.map(r=>({
+    'Pedido':        r.pid||'',
+    'Fecha':         r.fecha||'',
+    'Mes':           r.mes||'',
+    'Cliente':       r.razon_social||r.dest||'',
+    'Región':        r.region||'',
+    'Cajas':         r.cajas||0,
+    'Pallets':       r.pallets||0,
+    'Valor declarado':r.val_decl||0,
+    'Total flete':   r.total||0,
+    '% Logístico':   r.pct_log!=null?r.pct_log/100:null,
+    'Semáforo':      r.semaforo||'',
+    'OTIF':          r.otif||'',
+    'Días Klozer':   r.dias_klozer!=null?r.dias_klozer:'',
+    'Días Prep':     r.dias_prep!=null?r.dias_prep:'',
+    'Estado':        r.estado||'',
+    'Incidencia':    r.incidencia||'',
+    'Localidad':     r.localidad||'',
+    'Provincia':     r.provincia||'',
+  }));
+  const ws=XLSX.utils.json_to_sheet(data);
+  // Formato porcentaje para columna % Logístico
+  const pctCol='J';
+  for(let i=2;i<=data.length+1;i++) if(ws[`${pctCol}${i}`]) ws[`${pctCol}${i}`].z='0.0%';
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Pedidos');
+  const sufijo=mes?`_${mes.replace(/\s/g,'-')}`:''
+  XLSX.writeFile(wb,`pedidos${sufijo}_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 // ---- RANKING DE PEDIDOS CON MAYOR COSTO LOGÍSTICO ----
