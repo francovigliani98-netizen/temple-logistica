@@ -90,8 +90,15 @@ th[data-sort]:hover{background:var(--border2)}
 </nav>
 
 <div class="main">
+  <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+
   <div class="topbar">
-    <div class="topbar-title" id="page-title">Resumen</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="hamburger" onclick="toggleSidebar()" aria-label="Menú">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="topbar-title" id="page-title">Resumen</div>
+    </div>
     <div class="topbar-right">
       <span class="period-chip" id="total-pedidos-chip"></span>
       <span class="period-chip" id="period-chip">Cargando...</span>

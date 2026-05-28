@@ -1667,6 +1667,15 @@ function calcBudget(){
   document.getElementById('b-desv-pct').textContent=(desv>0?'+':'-')+Math.abs(desvPct).toFixed(1)+'% vs presupuesto';
 }
 
+function toggleSidebar(){
+  document.querySelector('.sidebar').classList.toggle('open');
+  document.querySelector('.sidebar-overlay').classList.toggle('open');
+}
+function closeSidebar(){
+  document.querySelector('.sidebar').classList.remove('open');
+  document.querySelector('.sidebar-overlay').classList.remove('open');
+}
+
 const pageTitles={dashboard:'Resumen',costos:'Costos',clientes:'Clientes',servicio:'Servicio',pedidos:'Pedidos',simulador:'Simulador',comparador:'Comparador',reglas:'Reglas de Venta'};
 function switchPage(id,el){
   document.querySelectorAll('.page').forEach(p=>{p.classList.remove('active');p.style.display='none';});
@@ -1677,6 +1686,7 @@ function switchPage(id,el){
   document.getElementById('page-title').textContent=pageTitles[id]||id;
   if(id==='comparador')renderComparador();
   if(id==='reglas')renderReglasVenta();
+  closeSidebar();
 }
 
 // ---- REGLAS DE VENTA ----
