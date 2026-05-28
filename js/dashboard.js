@@ -1078,11 +1078,24 @@ function renderChartsClientes(){
   const frecuenciaBody = document.getElementById('frecuencia-tbody');
   if (!frecuenciaBody) return;
 
-  // Construir datos por cliente con info de región y valor declarado
+  function normProd(s) {
+    if (!s) return null;
+    const u = s.toUpperCase();
+    if (u.includes('CERVEZA')||u.includes('IPA')||u.includes('STOUT')||u.includes('ALE')||u.includes('LAGER')||u.includes('RUBIA')||u.includes('NEGRA')) return 'Cerveza';
+    if (u.includes('ALTA MONT')) return 'Alta Montaña';
+    if (u.includes('GIN')&&u.includes('500')) return 'Gin 500ml';
+    if (u.includes('GIN')&&u.includes('750')) return 'Gin 750ml';
+    if (u.includes('GIN')) return 'Gin';
+    if (u.includes('VERMÚ')||u.includes('VERMU')||u.includes('FERIADO')) return 'Vermú';
+    if (u.includes('BARRIL')) return 'Barril';
+    return s.trim().split(' ').slice(0,2).join(' ');
+  }
+
+  // Construir datos por cliente con info de región, valor declarado y productos
   const clienteFrecMap = {};
   rows.forEach(r => {
     const k = r.razon_social || r.dest || 'Desconocido';
-    if (!clienteFrecMap[k]) clienteFrecMap[k] = { pedidos: 0, totalCajas: 0, totalFlete: 0, totalValDecl: 0, pctLogs: [], region: r.region || '', pallets: 0 };
+    if (!clienteFrecMap[k]) clienteFrecMap[k] = { pedidos: 0, totalCajas: 0, totalFlete: 0, totalValDecl: 0, pctLogs: [], region: r.region || '', pallets: 0, prods: {} };
     const d = clienteFrecMap[k];
     d.pedidos++;
     d.totalCajas  += (r.cajas    || 0);
@@ -1091,6 +1104,9 @@ function renderChartsClientes(){
     d.pallets     += (r.pallets  || 0);
     if (r.pct_log != null) d.pctLogs.push(r.pct_log);
     if (!d.region && r.region) d.region = r.region;
+    if (r.productos) r.productos.split(',').forEach(p => {
+      const n = normProd(p); if (n) d.prods[n] = (d.prods[n] || 0) + 1;
+    });
   });
 
   // Encuentra el mínimo de cajas para llegar a zona verde (<8%) o amarilla (<15%)
@@ -1126,7 +1142,8 @@ function renderChartsClientes(){
       const minVerde    = cajasMinimas(d.region, avgValDeclPorCaja, 0.08);
       const minAmarilla = cajasMinimas(d.region, avgValDeclPorCaja, 0.15);
 
-      return { name, region: d.region, pedidos: d.pedidos, avgCajas, currentPct, simCajas, simPct, ahorro, mejora, minVerde, minAmarilla };
+      const prodDominante = Object.entries(d.prods).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
+      return { name, region: d.region, pedidos: d.pedidos, avgCajas, currentPct, simCajas, simPct, ahorro, mejora, minVerde, minAmarilla, prodDominante };
     })
     .filter(Boolean)
     .filter(c => c.mejora > 0.5)
@@ -1134,7 +1151,7 @@ function renderChartsClientes(){
     .slice(0, 20);
 
   if (!simClientes.length) {
-    frecuenciaBody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">No hay clientes con 2+ pedidos en el período actual. Seleccioná un mes con más datos.</td></tr>';
+    frecuenciaBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">No hay clientes con 2+ pedidos en el período actual. Seleccioná un mes con más datos.</td></tr>';
     return;
   }
 
@@ -1154,9 +1171,11 @@ function renderChartsClientes(){
       minCell = `<span style="font-size:11px;color:var(--text3)">No alcanzable<br>por valor bajo</span>`;
     }
 
+    const prodColor = c.prodDominante === 'Cerveza' ? 'var(--amber-dark)' : c.prodDominante.includes('Gin') ? 'var(--text2)' : 'var(--green-dark)';
     return `<tr>
       <td title="${c.name}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">${c.name}</td>
       <td style="font-size:12px;color:var(--text2)">${c.region}</td>
+      <td style="font-size:12px;font-weight:600;color:${prodColor}">${c.prodDominante}</td>
       <td class="num-right">${c.pedidos}</td>
       <td class="num-right">
         <span style="font-size:13px;font-weight:600">${c.avgCajas.toFixed(1)} cj</span><br>
