@@ -27,8 +27,14 @@ function checkAuth() {
 }
 function login() {
   const pw = document.getElementById('admin-pw').value;
-  if (pw === ADMIN_PASSWORD) { sessionStorage.setItem('temple_admin','ok'); showPanel(); }
-  else { document.getElementById('login-error').textContent='Contraseña incorrecta'; document.getElementById('admin-pw').value=''; }
+  if (pw === ADMIN_PASSWORD) {
+    sessionStorage.setItem('temple_admin','ok');
+    logAudit('ADMIN_LOGIN', 'auth', 'Inicio de sesión al panel admin');
+    showPanel();
+  } else {
+    document.getElementById('login-error').textContent='Contraseña incorrecta';
+    document.getElementById('admin-pw').value='';
+  }
 }
 function logout() { sessionStorage.removeItem('temple_admin'); location.reload(); }
 function showPanel() {
@@ -262,6 +268,11 @@ async function uploadData() {
       total_rows: rows.length,
     });
 
+    await logAudit('UPLOAD_PEDIDOS', 'pedidos',
+      `Carga de pedidos: ${newRows.length} nuevos, ${updateRows.length} actualizados`,
+      { nuevos: newRows.length, actualizados: updateRows.length, total: rows.length }
+    );
+
     setProgress(100);
     setStatus('success',`✓ Listo. ${newRows.length} pedidos nuevos, ${updateRows.length} actualizados, ${ppRows.length} líneas de producto guardadas.`);
 
@@ -298,6 +309,7 @@ async function loadUploadHistory() {
 
 async function clearAllData() {
   if (!confirm('¿Seguro que querés borrar TODOS los datos? Esta acción no se puede deshacer.')) return;
+  await logAudit('CLEAR_ALL_DATA', 'pedidos + pedido_productos', 'BORRADO MASIVO: todos los datos de pedidos eliminados');
   await supabaseClient.from('pedido_productos').delete().neq('id',0);
   const { error } = await supabaseClient.from('pedidos').delete().neq('pid','____never____');
   if (!error) {

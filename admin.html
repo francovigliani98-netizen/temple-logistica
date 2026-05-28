@@ -140,10 +140,41 @@
       <button class="btn btn-danger" onclick="clearAllData()">Borrar todos los datos</button>
     </div>
 
+    <!-- HISTORIAL DE CAMBIOS -->
+    <div class="history-section" style="margin-bottom:40px">
+      <h3>🕵️ Historial de cambios</h3>
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+        <select id="audit-filter-accion" onchange="loadAuditLog()" style="padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;outline:none;background:var(--surface2)">
+          <option value="">Todas las acciones</option>
+          <option value="UPDATE_PRECIOS">Precios</option>
+          <option value="UPLOAD_TARIFARIO">Tarifario</option>
+          <option value="UPLOAD_LISTA_PRECIOS">Lista de precios</option>
+          <option value="UPLOAD_PEDIDOS">Pedidos</option>
+          <option value="APPROVE_USER">Aprobar usuario</option>
+          <option value="REVOKE_USER">Revocar acceso</option>
+          <option value="ADD_USER">Agregar usuario</option>
+          <option value="DELETE_USER">Eliminar usuario</option>
+          <option value="CLEAR_ALL_DATA">Borrado masivo</option>
+          <option value="ADMIN_LOGIN">Login admin</option>
+        </select>
+        <input type="date" id="audit-filter-desde" onchange="loadAuditLog()" title="Desde" style="padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;outline:none;background:var(--surface2)">
+        <input type="date" id="audit-filter-hasta" onchange="loadAuditLog()" title="Hasta" style="padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;outline:none;background:var(--surface2)">
+        <button class="btn btn-secondary" onclick="loadAuditLog()" style="font-size:12px;padding:6px 14px">Actualizar</button>
+        <button class="btn btn-secondary" onclick="exportAuditLog()" style="font-size:12px;padding:6px 14px">⬇ Exportar Excel</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Fecha y hora</th><th>Usuario</th><th>Acción</th><th>Descripción</th><th>Detalles</th></tr></thead>
+          <tbody id="audit-tbody"><tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text3)">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 </div>
 
 <script src="js/config.js"></script>
+<script src="js/audit.js"></script>
 <script src="js/admin.js"></script>
 <script>
 // ---- PRECIOS (FIX 2) ----
@@ -203,9 +234,20 @@ async function savePrecios() {
       litros_caja: parseFloat(document.getElementById('litros-'+slug)?.value) || def.litros,
     };
   });
+
+  const { data: antesData } = await supabaseClient.from('precios').select('*');
+  const antesMap = Object.fromEntries((antesData||[]).map(r => [r.producto, r]));
+
   const {error} = await supabaseClient.from('precios').upsert(rows, {onConflict:'producto'});
   const msg = document.getElementById('precios-msg');
   if(!error) {
+    const cambios = rows.filter(r => {
+      const prev = antesMap[r.producto];
+      return !prev || prev.precio !== r.precio || prev.margen !== r.margen || prev.litros_caja !== r.litros_caja;
+    }).map(r => ({ producto: r.producto, antes: antesMap[r.producto] || null, despues: r }));
+    if (cambios.length > 0) {
+      await logAudit('UPDATE_PRECIOS', 'precios', `${cambios.length} producto(s) modificado(s)`, { cambios });
+    }
     msg.className='status-msg success'; msg.textContent='✓ Precios actualizados correctamente.';
   } else {
     msg.className='status-msg error'; msg.textContent='Error: '+error.message;
@@ -232,24 +274,34 @@ async function loadUsers() {
 
 async function approveUser(email){
   const{error}=await supabaseClient.from('user_access').update({approved:true,approved_at:new Date().toISOString()}).eq('email',email);
-  if(!error){showUsersMsg('success',`✓ ${email} aprobado.`);loadUsers();}
-  else showUsersMsg('error','Error: '+error.message);
+  if(!error){
+    await logAudit('APPROVE_USER','user_access',`Usuario aprobado: ${email}`,{email});
+    showUsersMsg('success',`✓ ${email} aprobado.`);loadUsers();
+  } else showUsersMsg('error','Error: '+error.message);
 }
 async function revokeUser(email){
   if(!confirm(`¿Revocar acceso a ${email}?`))return;
   const{error}=await supabaseClient.from('user_access').update({approved:false}).eq('email',email);
-  if(!error){showUsersMsg('success',`Acceso revocado.`);loadUsers();}
+  if(!error){
+    await logAudit('REVOKE_USER','user_access',`Acceso revocado: ${email}`,{email});
+    showUsersMsg('success',`Acceso revocado.`);loadUsers();
+  }
 }
 async function deleteUser(email){
   if(!confirm(`¿Rechazar solicitud de ${email}?`))return;
   const{error}=await supabaseClient.from('user_access').delete().eq('email',email);
-  if(!error){showUsersMsg('success','Solicitud eliminada.');loadUsers();}
+  if(!error){
+    await logAudit('DELETE_USER','user_access',`Usuario eliminado: ${email}`,{email});
+    showUsersMsg('success','Solicitud eliminada.');loadUsers();
+  }
 }
 async function addUser(){
   const email=document.getElementById('new-user-email').value.trim();if(!email)return;
   const{error}=await supabaseClient.from('user_access').upsert({email,approved:true,approved_at:new Date().toISOString()},{onConflict:'email'});
-  if(!error){showUsersMsg('success',`✓ ${email} agregado y aprobado.`);document.getElementById('new-user-email').value='';loadUsers();}
-  else showUsersMsg('error','Error: '+error.message);
+  if(!error){
+    await logAudit('ADD_USER','user_access',`Usuario agregado y aprobado: ${email}`,{email});
+    showUsersMsg('success',`✓ ${email} agregado y aprobado.`);document.getElementById('new-user-email').value='';loadUsers();
+  } else showUsersMsg('error','Error: '+error.message);
 }
 function showUsersMsg(type,text){
   const el=document.getElementById('users-msg');
@@ -337,14 +389,16 @@ async function uploadListaPrecios() {
   btn.textContent = 'Actualizando...';
 
   try {
+    const totalSKUs = listaData.length;
     const chunks = [];
     for (let i = 0; i < listaData.length; i += 200) chunks.push(listaData.slice(i, i + 200));
     for (const chunk of chunks) {
       const { error } = await supabaseClient.from('lista_precios').upsert(chunk, { onConflict: 'sku' });
       if (error) throw new Error(error.message);
     }
+    await logAudit('UPLOAD_LISTA_PRECIOS', 'lista_precios', `Lista de precios actualizada: ${totalSKUs} SKUs`, { total: totalSKUs });
     msg.className = 'status-msg success';
-    msg.textContent = `✓ Lista actualizada: ${listaData.length} productos`;
+    msg.textContent = `✓ Lista actualizada: ${totalSKUs} productos`;
     msg.style.display = 'block';
     document.getElementById('lista-name').textContent = 'Ningún archivo seleccionado';
     document.getElementById('file-lista').value = '';
@@ -444,6 +498,8 @@ async function uploadTarifario() {
   const msg = document.getElementById('tarif-status');
   btn.disabled = true; btn.textContent = 'Actualizando...';
   try {
+    const totalZonas = tarifarioData.tarifario.length;
+    const totalCPs = tarifarioData.zonas.length;
     const { error: e1 } = await supabaseClient.from('tarifario').upsert(tarifarioData.tarifario, { onConflict: 'zona' });
     if (e1) throw new Error('Tarifario: ' + e1.message);
     const chunks = [];
@@ -452,8 +508,12 @@ async function uploadTarifario() {
       const { error: e2 } = await supabaseClient.from('zonas_cp').upsert(chunk, { onConflict: 'cp' });
       if (e2) throw new Error('Zonas CP: ' + e2.message);
     }
+    await logAudit('UPLOAD_TARIFARIO', 'tarifario + zonas_cp',
+      `Tarifario actualizado: ${totalZonas} zonas · ${totalCPs} CPs`,
+      { zonas: totalZonas, cps: totalCPs }
+    );
     msg.className = 'status-msg success';
-    msg.textContent = `✓ Tarifario actualizado: ${tarifarioData.tarifario.length} zonas · ${tarifarioData.zonas.length} CPs`;
+    msg.textContent = `✓ Tarifario actualizado: ${totalZonas} zonas · ${totalCPs} CPs`;
     msg.style.display = 'block';
     document.getElementById('tarif-name').textContent = 'Ningún archivo seleccionado';
     document.getElementById('file-tarif').value = '';
@@ -466,8 +526,78 @@ async function uploadTarifario() {
   btn.textContent = 'Actualizar tarifario'; btn.disabled = false;
 }
 
-// Override showPanel
+// ---- HISTORIAL DE CAMBIOS ----
+const AUDIT_LABELS = {
+  UPDATE_PRECIOS:      'Precios editados',
+  UPLOAD_TARIFARIO:    'Tarifario subido',
+  UPLOAD_LISTA_PRECIOS:'Lista de precios',
+  UPLOAD_PEDIDOS:      'Pedidos cargados',
+  APPROVE_USER:        'Usuario aprobado',
+  REVOKE_USER:         'Acceso revocado',
+  ADD_USER:            'Usuario agregado',
+  DELETE_USER:         'Usuario eliminado',
+  CLEAR_ALL_DATA:      '⚠ Borrado masivo',
+  ADMIN_LOGIN:         'Login admin',
+};
 
+let _auditData = [];
+
+async function loadAuditLog() {
+  const accion  = document.getElementById('audit-filter-accion').value;
+  const desde   = document.getElementById('audit-filter-desde').value;
+  const hasta   = document.getElementById('audit-filter-hasta').value;
+  let q = supabaseClient.from('audit_log').select('*').order('created_at',{ascending:false}).limit(500);
+  if (accion) q = q.eq('accion', accion);
+  if (desde)  q = q.gte('created_at', desde + 'T00:00:00');
+  if (hasta)  q = q.lte('created_at', hasta + 'T23:59:59');
+  const { data, error } = await q;
+  _auditData = data || [];
+  renderAuditTable(_auditData);
+}
+
+function renderAuditTable(data) {
+  const tbody = document.getElementById('audit-tbody');
+  if (!data?.length) {
+    tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text3)">Sin registros para los filtros seleccionados</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(r => {
+    const fecha = new Date(r.created_at).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const label = AUDIT_LABELS[r.accion] || r.accion;
+    const badgeColor = r.accion === 'CLEAR_ALL_DATA' ? 'var(--red)' : r.accion === 'ADMIN_LOGIN' ? 'var(--text2)' : r.accion.startsWith('UPLOAD') || r.accion === 'UPDATE_PRECIOS' ? 'var(--green-dark)' : 'var(--amber-dark)';
+    const detallesJson = r.detalles && Object.keys(r.detalles).length ? JSON.stringify(r.detalles, null, 2) : '';
+    const detallesBtn = detallesJson
+      ? `<button onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'" style="font-size:11px;padding:3px 8px;border:1px solid var(--border2);border-radius:var(--radius);cursor:pointer;background:var(--surface2)">Ver</button>
+         <pre style="display:none;margin:6px 0 0;font-size:11px;background:var(--surface2);padding:8px;border-radius:var(--radius);overflow:auto;max-height:200px;white-space:pre-wrap">${detallesJson}</pre>`
+      : '—';
+    return `<tr>
+      <td style="font-size:12px;color:var(--text2);white-space:nowrap">${fecha}</td>
+      <td style="font-size:12px">${r.usuario||'—'}</td>
+      <td><span style="font-size:11px;font-weight:600;color:${badgeColor}">${label}</span></td>
+      <td style="font-size:13px">${r.descripcion||'—'}</td>
+      <td>${detallesBtn}</td>
+    </tr>`;
+  }).join('');
+}
+
+function exportAuditLog() {
+  if (!_auditData.length) return;
+  const rows = _auditData.map(r => ({
+    'Fecha y hora': new Date(r.created_at).toLocaleString('es-AR'),
+    'Usuario': r.usuario || '',
+    'Acción': AUDIT_LABELS[r.accion] || r.accion,
+    'Tabla': r.tabla || '',
+    'Descripción': r.descripcion || '',
+    'Detalles': r.detalles ? JSON.stringify(r.detalles) : '',
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Historial');
+  const fecha = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `audit_log_${fecha}.xlsx`);
+}
+
+// Override showPanel
 const _origShowPanel = showPanel;
 function showPanel(){
   document.getElementById('login-section').style.display='none';
@@ -475,6 +605,7 @@ function showPanel(){
   loadUploadHistory();
   loadUsers();
   loadPrecios();
+  loadAuditLog();
 }
 </script>
 </body>
