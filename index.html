@@ -208,6 +208,36 @@ th[data-sort]:hover{background:var(--border2)}
       <div class="table-header"><h3>Clientes con más pedidos rojos</h3></div>
       <div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Pedidos totales</th><th>Pedidos rojos</th><th>% en rojo</th><th>Cajas prom.</th><th>% logístico prom.</th><th>Región</th></tr></thead><tbody id="clientes-rojos-tbody"></tbody></table></div>
     </div>
+
+    <div class="divider"></div>
+    <div class="section-header">
+      <h2>Análisis de frecuencia de envíos</h2>
+      <span class="desc">Simulación del impacto de consolidar pedidos a cada 15 días (doble de cajas por envío)</span>
+    </div>
+    <div class="table-card" style="margin-bottom:32px">
+      <div class="table-header">
+        <h3>Clientes con mayor potencial de mejora</h3>
+        <span style="font-size:12px;color:var(--text3)">Clientes con 2+ pedidos en el período · ordenados por ahorro estimado</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Cliente</th>
+            <th>Región</th>
+            <th class="num-right">Pedidos</th>
+            <th class="num-right">Cajas prom.</th>
+            <th class="num-right">% Log. actual</th>
+            <th class="num-right">% Log. estimado</th>
+            <th class="num-right">Mejora</th>
+            <th class="num-right">Ahorro estimado</th>
+          </tr></thead>
+          <tbody id="frecuencia-tbody"></tbody>
+        </table>
+      </div>
+      <div style="margin-top:12px;padding:12px 16px;background:var(--surface2);border-radius:var(--radius);font-size:12px;color:var(--text3)">
+        <strong>Cómo se calcula:</strong> Se simula reducir la frecuencia a la mitad (pedidos cada 15 días) duplicando las cajas promedio por envío. El nuevo flete se calcula con la tarifa real de Klozer para ese volumen y zona.
+      </div>
+    </div>
   </div>
 
   <!-- SERVICIO -->

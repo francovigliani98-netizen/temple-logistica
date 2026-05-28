@@ -1073,6 +1073,71 @@ function renderChartsClientes(){
     <td class="num-right">${r.avgCajas.toFixed(1)}</td>
     <td class="num-right"><span class="badge red">${r.avgPct.toFixed(1)}%</span></td>
     <td>${r.region}</td></tr>`).join('');
+
+  // ---- ANÁLISIS DE FRECUENCIA ----
+  const frecuenciaBody = document.getElementById('frecuencia-tbody');
+  if (!frecuenciaBody) return;
+
+  // Construir datos por cliente con info de región y valor declarado
+  const clienteFrecMap = {};
+  rows.forEach(r => {
+    const k = r.razon_social || r.dest || 'Desconocido';
+    if (!clienteFrecMap[k]) clienteFrecMap[k] = { pedidos: 0, totalCajas: 0, totalFlete: 0, totalValDecl: 0, pctLogs: [], region: r.region || '', pallets: 0 };
+    const d = clienteFrecMap[k];
+    d.pedidos++;
+    d.totalCajas  += (r.cajas    || 0);
+    d.totalFlete  += (r.total    || 0);
+    d.totalValDecl+= (r.val_decl || 0);
+    d.pallets     += (r.pallets  || 0);
+    if (r.pct_log != null) d.pctLogs.push(r.pct_log);
+    if (!d.region && r.region) d.region = r.region;
+  });
+
+  const simClientes = Object.entries(clienteFrecMap)
+    .filter(([, d]) => d.pedidos >= 2 && d.totalValDecl > 0 && d.region)
+    .map(([name, d]) => {
+      const avgCajas   = d.totalCajas / d.pedidos;
+      const avgPallet  = d.pallets    / d.pedidos;
+      const currentPct = d.pctLogs.length ? d.pctLogs.reduce((s, v) => s + v, 0) / d.pctLogs.length : (d.totalValDecl ? d.totalFlete / d.totalValDecl * 100 : null);
+
+      // Simular: mitad de pedidos con el doble de cajas
+      const simCajas    = avgCajas * 2;
+      const simPallets  = avgPallet * 2;
+      const simPedidos  = Math.ceil(d.pedidos / 2);
+      const simFleteUnit = calcFlete(d.region, Math.round(simCajas), simPallets);
+      if (simFleteUnit == null || currentPct == null) return null;
+      const simTotalFlete = simFleteUnit * simPedidos;
+      const simPct        = simTotalFlete / d.totalValDecl * 100;
+      const ahorro        = d.totalFlete - simTotalFlete;
+      const mejora        = currentPct - simPct;
+
+      return { name, region: d.region, pedidos: d.pedidos, avgCajas, currentPct, simPct, ahorro, mejora };
+    })
+    .filter(Boolean)
+    .filter(c => c.mejora > 0.5)
+    .sort((a, b) => b.ahorro - a.ahorro)
+    .slice(0, 20);
+
+  if (!simClientes.length) {
+    frecuenciaBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">No hay clientes con 2+ pedidos en el período actual. Seleccioná un mes con más datos.</td></tr>';
+    return;
+  }
+
+  frecuenciaBody.innerHTML = simClientes.map(c => {
+    const mejoraBadge = c.mejora >= 5 ? 'red' : c.mejora >= 2 ? 'amber' : 'green';
+    const simBadge    = c.simPct < 8 ? 'green' : c.simPct < 15 ? 'amber' : 'red';
+    const actBadge    = c.currentPct < 8 ? 'green' : c.currentPct < 15 ? 'amber' : 'red';
+    return `<tr>
+      <td title="${c.name}" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</td>
+      <td style="font-size:12px;color:var(--text2)">${c.region}</td>
+      <td class="num-right">${c.pedidos}</td>
+      <td class="num-right">${c.avgCajas.toFixed(1)}</td>
+      <td class="num-right"><span class="badge ${actBadge}">${c.currentPct.toFixed(1)}%</span></td>
+      <td class="num-right"><span class="badge ${simBadge}">${c.simPct.toFixed(1)}%</span></td>
+      <td class="num-right"><span class="badge ${mejoraBadge}" style="font-weight:700">−${c.mejora.toFixed(1)} pts</span></td>
+      <td class="num-right" style="font-weight:600;color:var(--green-dark)">${peso(c.ahorro)}</td>
+    </tr>`;
+  }).join('');
 }
 
 function renderChartsServicio(){
