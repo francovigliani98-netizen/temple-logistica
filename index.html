@@ -225,17 +225,16 @@ th[data-sort]:hover{background:var(--border2)}
             <th>Cliente</th>
             <th>Región</th>
             <th class="num-right">Pedidos</th>
-            <th class="num-right">Cajas prom.</th>
-            <th class="num-right">% Log. actual</th>
-            <th class="num-right">% Log. estimado</th>
-            <th class="num-right">Mejora</th>
+            <th class="num-right">Situación actual<br><span style="font-weight:400;font-size:10px">cajas prom. · % log.</span></th>
+            <th class="num-right">Cada 15 días<br><span style="font-weight:400;font-size:10px">cajas × 2 · % estimado</span></th>
+            <th class="num-right">Cajas mín. p/verde<br><span style="font-weight:400;font-size:10px">para llegar a &lt;8%</span></th>
             <th class="num-right">Ahorro estimado</th>
           </tr></thead>
           <tbody id="frecuencia-tbody"></tbody>
         </table>
       </div>
       <div style="margin-top:12px;padding:12px 16px;background:var(--surface2);border-radius:var(--radius);font-size:12px;color:var(--text3)">
-        <strong>Cómo se calcula:</strong> Se simula reducir la frecuencia a la mitad (pedidos cada 15 días) duplicando las cajas promedio por envío. El nuevo flete se calcula con la tarifa real de Klozer para ese volumen y zona.
+        <strong>Cómo se calcula:</strong> "Cada 15 días" simula duplicar las cajas por envío con la tarifa real de Klozer. "Cajas mín. p/verde" es el mínimo de cajas por pedido para que el % logístico baje del 8%, basado en el valor de mercadería promedio del cliente.
       </div>
     </div>
   </div>

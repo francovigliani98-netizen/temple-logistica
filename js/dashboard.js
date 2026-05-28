@@ -1093,25 +1093,40 @@ function renderChartsClientes(){
     if (!d.region && r.region) d.region = r.region;
   });
 
+  // Encuentra el mínimo de cajas para llegar a zona verde (<8%) o amarilla (<15%)
+  function cajasMinimas(region, avgValDeclPorCaja, metaPct) {
+    if (!avgValDeclPorCaja || !region) return null;
+    for (let cajas = 1; cajas <= 100; cajas++) {
+      const flete = calcFlete(region, cajas, 0);
+      if (flete == null) continue;
+      if (flete / (avgValDeclPorCaja * cajas) < metaPct) return cajas;
+    }
+    return null;
+  }
+
   const simClientes = Object.entries(clienteFrecMap)
-    .filter(([, d]) => d.pedidos >= 2 && d.totalValDecl > 0 && d.region)
+    .filter(([, d]) => d.pedidos >= 2 && d.totalValDecl > 0 && d.totalCajas > 0 && d.region)
     .map(([name, d]) => {
-      const avgCajas   = d.totalCajas / d.pedidos;
-      const avgPallet  = d.pallets    / d.pedidos;
-      const currentPct = d.pctLogs.length ? d.pctLogs.reduce((s, v) => s + v, 0) / d.pctLogs.length : (d.totalValDecl ? d.totalFlete / d.totalValDecl * 100 : null);
+      const avgCajas         = d.totalCajas / d.pedidos;
+      const avgPallet        = d.pallets    / d.pedidos;
+      const avgValDeclPorCaja = d.totalValDecl / d.totalCajas;
+      const currentPct       = d.totalFlete / d.totalValDecl * 100;
 
       // Simular: mitad de pedidos con el doble de cajas
-      const simCajas    = avgCajas * 2;
-      const simPallets  = avgPallet * 2;
-      const simPedidos  = Math.ceil(d.pedidos / 2);
-      const simFleteUnit = calcFlete(d.region, Math.round(simCajas), simPallets);
-      if (simFleteUnit == null || currentPct == null) return null;
+      const simCajas     = Math.round(avgCajas * 2);
+      const simPedidos   = Math.ceil(d.pedidos / 2);
+      const simFleteUnit = calcFlete(d.region, simCajas, avgPallet * 2);
+      if (simFleteUnit == null) return null;
       const simTotalFlete = simFleteUnit * simPedidos;
       const simPct        = simTotalFlete / d.totalValDecl * 100;
       const ahorro        = d.totalFlete - simTotalFlete;
       const mejora        = currentPct - simPct;
 
-      return { name, region: d.region, pedidos: d.pedidos, avgCajas, currentPct, simPct, ahorro, mejora };
+      // Cajas mínimas para zona verde (<8%) y amarilla (<15%)
+      const minVerde    = cajasMinimas(d.region, avgValDeclPorCaja, 0.08);
+      const minAmarilla = cajasMinimas(d.region, avgValDeclPorCaja, 0.15);
+
+      return { name, region: d.region, pedidos: d.pedidos, avgCajas, currentPct, simCajas, simPct, ahorro, mejora, minVerde, minAmarilla };
     })
     .filter(Boolean)
     .filter(c => c.mejora > 0.5)
@@ -1119,22 +1134,39 @@ function renderChartsClientes(){
     .slice(0, 20);
 
   if (!simClientes.length) {
-    frecuenciaBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">No hay clientes con 2+ pedidos en el período actual. Seleccioná un mes con más datos.</td></tr>';
+    frecuenciaBody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">No hay clientes con 2+ pedidos en el período actual. Seleccioná un mes con más datos.</td></tr>';
     return;
   }
 
   frecuenciaBody.innerHTML = simClientes.map(c => {
-    const mejoraBadge = c.mejora >= 5 ? 'red' : c.mejora >= 2 ? 'amber' : 'green';
-    const simBadge    = c.simPct < 8 ? 'green' : c.simPct < 15 ? 'amber' : 'red';
-    const actBadge    = c.currentPct < 8 ? 'green' : c.currentPct < 15 ? 'amber' : 'red';
+    const actBadge = c.currentPct < 8 ? 'green' : c.currentPct < 15 ? 'amber' : 'red';
+    const simBadge = c.simPct < 8 ? 'green' : c.simPct < 15 ? 'amber' : 'red';
+
+    let minCell;
+    if (c.minVerde) {
+      const yaLoTiene = c.avgCajas >= c.minVerde;
+      minCell = yaLoTiene
+        ? `<span class="badge green">Ya cumple (${Math.round(c.avgCajas)} cj)</span>`
+        : `<span style="font-weight:700;color:var(--green-dark);font-size:14px">${c.minVerde} cajas</span>`;
+    } else if (c.minAmarilla) {
+      minCell = `<span style="font-weight:700;color:var(--amber-dark);font-size:14px">${c.minAmarilla} cajas</span><br><span style="font-size:10px;color:var(--text3)">p/zona amarilla</span>`;
+    } else {
+      minCell = `<span style="font-size:11px;color:var(--text3)">No alcanzable<br>por valor bajo</span>`;
+    }
+
     return `<tr>
-      <td title="${c.name}" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</td>
+      <td title="${c.name}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">${c.name}</td>
       <td style="font-size:12px;color:var(--text2)">${c.region}</td>
       <td class="num-right">${c.pedidos}</td>
-      <td class="num-right">${c.avgCajas.toFixed(1)}</td>
-      <td class="num-right"><span class="badge ${actBadge}">${c.currentPct.toFixed(1)}%</span></td>
-      <td class="num-right"><span class="badge ${simBadge}">${c.simPct.toFixed(1)}%</span></td>
-      <td class="num-right"><span class="badge ${mejoraBadge}" style="font-weight:700">−${c.mejora.toFixed(1)} pts</span></td>
+      <td class="num-right">
+        <span style="font-size:13px;font-weight:600">${c.avgCajas.toFixed(1)} cj</span><br>
+        <span class="badge ${actBadge}" style="margin-top:3px">${c.currentPct.toFixed(1)}%</span>
+      </td>
+      <td class="num-right">
+        <span style="font-size:13px;font-weight:600">${c.simCajas} cj</span><br>
+        <span class="badge ${simBadge}" style="margin-top:3px">${c.simPct.toFixed(1)}%</span>
+      </td>
+      <td class="num-right">${minCell}</td>
       <td class="num-right" style="font-weight:600;color:var(--green-dark)">${peso(c.ahorro)}</td>
     </tr>`;
   }).join('');
