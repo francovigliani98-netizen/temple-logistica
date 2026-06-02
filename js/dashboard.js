@@ -1040,6 +1040,50 @@ function renderComparador(){
   });
 }
 
+let frecTargetInterval = 10;
+
+function setFrecInterval(days, btn) {
+  frecTargetInterval = days;
+  document.querySelectorAll('.frec-btn').forEach(b => {
+    b.style.background = 'var(--surface)'; b.style.color = 'var(--text2)';
+    b.style.borderColor = 'var(--border2)'; b.style.fontWeight = '';
+  });
+  if (btn) { btn.style.background = 'var(--blue)'; btn.style.color = '#fff'; btn.style.borderColor = 'var(--blue)'; btn.style.fontWeight = '600'; }
+  renderChartsClientes();
+}
+
+function getProdsMix(pid) {
+  if (!mixData || !mixData.length) return '';
+  const prods = mixData.filter(m => String(m.pid) === String(pid));
+  if (!prods.length) return '';
+  return prods.map(p => `${p.producto} ×${p.cantidad}`).join(' · ');
+}
+
+function safePidId(pid) {
+  return 'p' + String(pid||'').replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+function verSimulacionCliente(name) {
+  const navItem = document.querySelector('[data-page="clientes"]');
+  if (navItem) switchPage('clientes', navItem);
+  const inp = document.getElementById('frec-search');
+  if (inp) inp.value = name;
+  renderChartsClientes();
+  setTimeout(() => {
+    const el = document.getElementById('frec-summary') || document.getElementById('frecuencia-tbody');
+    if (el) el.scrollIntoView({behavior:'smooth', block:'center'});
+  }, 120);
+}
+
+function togglePedidoDetail(uid) {
+  const det = document.getElementById('det-'+uid);
+  const ico = document.getElementById('ico-'+uid);
+  if (!det) return;
+  const open = det.style.display !== 'none';
+  det.style.display = open ? 'none' : 'table-row';
+  if (ico) ico.textContent = open ? '▸' : '▾';
+}
+
 function renderChartsClientes(){
   const rows=filteredRows;
   const clientMap={};
@@ -1056,7 +1100,9 @@ function renderChartsClientes(){
   document.getElementById('rank-gasto').innerHTML=topGasto.map(([name,d],i)=>`
     <div class="rank-row"><div class="rank-num">${i+1}</div><div class="rank-name" title="${name}">${name}</div>
     <div class="rank-bar-wrap"><div class="rank-bar" style="width:${Math.round(d.gasto/maxG*100)}%"></div></div>
-    <div class="rank-val">${peso(d.gasto)}</div></div>`).join('');
+    <div class="rank-val">${peso(d.gasto)}</div>
+    <button onclick="verSimulacionCliente(${JSON.stringify(name)})" title="Ver cuánto se ahorraría consolidando pedidos" style="flex-shrink:0;font-size:10px;padding:2px 8px;border:1px solid var(--border2);border-radius:12px;background:var(--surface2);color:var(--text2);cursor:pointer;white-space:nowrap;margin-left:6px">Ver ahorro →</button>
+    </div>`).join('');
   const topPct=Object.entries(clientMap).filter(([,d])=>d.pctLogs.length>=2).map(([name,d])=>[name,d.pctLogs.reduce((s,v)=>s+v,0)/d.pctLogs.length]).sort((a,b)=>b[1]-a[1]).slice(0,10);
   const maxP=topPct[0]?.[1]||1;
   document.getElementById('rank-pctlog').innerHTML=topPct.map(([name,avg],i)=>`
@@ -1095,7 +1141,7 @@ function renderChartsClientes(){
   const clienteFrecMap = {};
   rows.forEach(r => {
     const k = r.razon_social || r.dest || 'Desconocido';
-    if (!clienteFrecMap[k]) clienteFrecMap[k] = { pedidos: 0, totalCajas: 0, totalFlete: 0, totalValDecl: 0, pctLogs: [], region: r.region || '', pallets: 0, prods: {} };
+    if (!clienteFrecMap[k]) clienteFrecMap[k] = { pedidos: 0, totalCajas: 0, totalFlete: 0, totalValDecl: 0, pctLogs: [], region: r.region || '', pallets: 0, prods: {}, fechas: [] };
     const d = clienteFrecMap[k];
     d.pedidos++;
     d.totalCajas  += (r.cajas    || 0);
@@ -1104,6 +1150,7 @@ function renderChartsClientes(){
     d.pallets     += (r.pallets  || 0);
     if (r.pct_log != null) d.pctLogs.push(r.pct_log);
     if (!d.region && r.region) d.region = r.region;
+    if (r.fecha) d.fechas.push(r.fecha);
     if (r.productos) r.productos.split(',').forEach(p => {
       const n = normProd(p); if (n) d.prods[n] = (d.prods[n] || 0) + 1;
     });
@@ -1120,73 +1167,118 @@ function renderChartsClientes(){
     return null;
   }
 
+  const targetInterval = frecTargetInterval || 10;
+
+  // Actualizar header de la columna de simulación
+  const thSim = document.getElementById('frec-th-sim');
+  if (thSim) thSim.innerHTML = `Cada ${targetInterval} días<br><span style="font-weight:400;font-size:10px" id="frec-th-sim-sub">cajas estimadas · % esperado</span>`;
+
   const simClientes = Object.entries(clienteFrecMap)
     .filter(([, d]) => d.pedidos >= 2 && d.totalValDecl > 0 && d.totalCajas > 0 && d.region)
     .map(([name, d]) => {
-      const avgCajas         = d.totalCajas / d.pedidos;
-      const avgPallet        = d.pallets    / d.pedidos;
+      const avgCajas          = d.totalCajas / d.pedidos;
+      const avgPallet         = d.pallets    / d.pedidos;
       const avgValDeclPorCaja = d.totalValDecl / d.totalCajas;
-      const currentPct       = d.totalFlete / d.totalValDecl * 100;
+      const currentPct        = d.totalFlete / d.totalValDecl * 100;
 
-      // Simular: mitad de pedidos con el doble de cajas
-      const simCajas     = Math.round(avgCajas * 2);
-      const simPedidos   = Math.ceil(d.pedidos / 2);
-      const simFleteUnit = calcFlete(d.region, simCajas, avgPallet * 2);
-      if (simFleteUnit == null) return null;
-      const simTotalFlete = simFleteUnit * simPedidos;
-      const simPct        = simTotalFlete / d.totalValDecl * 100;
-      const ahorro        = d.totalFlete - simTotalFlete;
-      const mejora        = currentPct - simPct;
+      // Calcular intervalo promedio real desde fechas
+      let avgInterval = null, periodDays = null;
+      if (d.fechas.length >= 2) {
+        const sorted = d.fechas.map(f => new Date(f+'T12:00:00')).sort((a,b)=>a-b);
+        periodDays = (sorted[sorted.length-1] - sorted[0]) / (1000*60*60*24);
+        avgInterval = periodDays > 0 ? periodDays / (d.fechas.length - 1) : null;
+      }
 
-      // Cajas mínimas para zona verde (<8%) y amarilla (<15%)
+      // Si ya pide con menor frecuencia que el target, no aplica
+      if (avgInterval !== null && avgInterval >= targetInterval) return null;
+
+      let simCajas, simPedidosN, simFleteUnit, simTotalFlete;
+      if (avgInterval !== null && periodDays > 0) {
+        simPedidosN  = Math.max(1, periodDays / targetInterval);
+        simCajas     = Math.round(d.totalCajas / simPedidosN);
+        const simPallets = d.pallets > 0 ? Math.ceil(d.pallets * (simPedidosN / d.pedidos)) : 0;
+        simFleteUnit = calcFlete(d.region, simCajas, simPallets);
+        if (simFleteUnit == null) return null;
+        simTotalFlete = simFleteUnit * Math.ceil(simPedidosN);
+      } else {
+        // Sin fechas: duplicar cajas como proxy conservador
+        simCajas      = Math.round(avgCajas * 2);
+        simPedidosN   = d.pedidos / 2;
+        simFleteUnit  = calcFlete(d.region, simCajas, avgPallet * 2);
+        if (simFleteUnit == null) return null;
+        simTotalFlete = simFleteUnit * Math.ceil(simPedidosN);
+      }
+
+      const simPct  = Math.max(0, simTotalFlete / d.totalValDecl * 100);
+      const ahorro  = d.totalFlete - simTotalFlete;
+      const mejora  = currentPct - simPct;
+
       const minVerde    = cajasMinimas(d.region, avgValDeclPorCaja, 0.08);
       const minAmarilla = cajasMinimas(d.region, avgValDeclPorCaja, 0.15);
 
       const prodDominante = Object.entries(d.prods).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
-      return { name, region: d.region, pedidos: d.pedidos, avgCajas, currentPct, simCajas, simPct, ahorro, mejora, minVerde, minAmarilla, prodDominante };
+      return { name, region: d.region, pedidos: d.pedidos, avgCajas, currentPct, simCajas, simPct, ahorro, mejora, minVerde, minAmarilla, prodDominante, avgInterval };
     })
     .filter(Boolean)
     .filter(c => c.mejora > 0.5)
     .sort((a, b) => b.ahorro - a.ahorro)
     .slice(0, 20);
 
-  if (!simClientes.length) {
-    frecuenciaBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">No hay clientes con 2+ pedidos en el período actual. Seleccioná un mes con más datos.</td></tr>';
+  // Actualizar header columna comparación
+  const thSim = document.getElementById('frec-th-sim');
+  if (thSim) thSim.innerHTML = `% actual → cada ${targetInterval}d<br><span style="font-weight:400;font-size:10px" id="frec-th-sim-sub">cajas actuales → cajas simuladas</span>`;
+
+  // Filtrar por búsqueda
+  const frecSearch = (document.getElementById('frec-search')?.value || '').toLowerCase().trim();
+  const displayClientes = frecSearch
+    ? simClientes.filter(c => c.name.toLowerCase().includes(frecSearch))
+    : simClientes;
+
+  const totalAhorro = displayClientes.reduce((s,c) => s + Math.max(0, c.ahorro), 0);
+  const summaryEl = document.getElementById('frec-summary');
+  if (summaryEl) {
+    if (displayClientes.length) {
+      summaryEl.style.display = '';
+      const label = frecSearch
+        ? `<strong>${displayClientes[0].name}</strong>`
+        : `los <strong>${displayClientes.length} clientes</strong> de abajo`;
+      summaryEl.innerHTML = `Si ${label} consolidara${displayClientes.length > 1 ? 'n' : ''} pedidos a cada <strong>${targetInterval} días</strong> → ahorro estimado en el período: <strong style="font-size:15px;color:var(--green-dark)">${peso(totalAhorro)}</strong>`;
+    } else {
+      summaryEl.style.display = 'none';
+    }
+  }
+
+  if (!displayClientes.length) {
+    frecuenciaBody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">' + (frecSearch ? `No se encontró "${frecSearch}" en el listado.` : `No hay clientes que pidan con más frecuencia que cada ${targetInterval} días en el período actual.`) + '</td></tr>';
     return;
   }
 
-  frecuenciaBody.innerHTML = simClientes.map(c => {
+  frecuenciaBody.innerHTML = displayClientes.map(c => {
     const actBadge = c.currentPct < 8 ? 'green' : c.currentPct < 15 ? 'amber' : 'red';
     const simBadge = c.simPct < 8 ? 'green' : c.simPct < 15 ? 'amber' : 'red';
-
-    let minCell;
-    if (c.minVerde) {
-      const yaLoTiene = c.avgCajas >= c.minVerde;
-      minCell = yaLoTiene
-        ? `<span class="badge green">Ya cumple (${Math.round(c.avgCajas)} cj)</span>`
-        : `<span style="font-weight:700;color:var(--green-dark);font-size:14px">${c.minVerde} cajas</span>`;
-    } else if (c.minAmarilla) {
-      minCell = `<span style="font-weight:700;color:var(--amber-dark);font-size:14px">${c.minAmarilla} cajas</span><br><span style="font-size:10px;color:var(--text3)">p/zona amarilla</span>`;
-    } else {
-      minCell = `<span style="font-size:11px;color:var(--text3)">No alcanzable<br>por valor bajo</span>`;
-    }
-
     const prodColor = c.prodDominante === 'Cerveza' ? 'var(--amber-dark)' : c.prodDominante.includes('Gin') ? 'var(--text2)' : 'var(--green-dark)';
+    const intervaloText = c.avgInterval != null ? `cada ~${Math.round(c.avgInterval)} días` : '';
     return `<tr>
-      <td title="${c.name}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">${c.name}</td>
-      <td style="font-size:12px;color:var(--text2)">${c.region}</td>
-      <td style="font-size:12px;font-weight:600;color:${prodColor}">${c.prodDominante}</td>
-      <td class="num-right">${c.pedidos}</td>
-      <td class="num-right">
-        <span style="font-size:13px;font-weight:600">${c.avgCajas.toFixed(1)} cj</span><br>
-        <span class="badge ${actBadge}" style="margin-top:3px">${c.currentPct.toFixed(1)}%</span>
+      <td style="white-space:normal;min-width:140px">
+        <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px" title="${c.name}">${c.name}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${c.region} · <span style="color:${prodColor};font-weight:600">${c.prodDominante}</span></div>
       </td>
       <td class="num-right">
-        <span style="font-size:13px;font-weight:600">${c.simCajas} cj</span><br>
-        <span class="badge ${simBadge}" style="margin-top:3px">${c.simPct.toFixed(1)}%</span>
+        <span style="font-weight:600">${c.pedidos} pedidos</span><br>
+        <span style="font-size:11px;color:var(--text3)">${intervaloText}</span>
       </td>
-      <td class="num-right">${minCell}</td>
-      <td class="num-right" style="font-weight:600;color:var(--green-dark)">${peso(c.ahorro)}</td>
+      <td class="num-right" style="white-space:normal">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">
+          <span class="badge ${actBadge}">${c.currentPct.toFixed(1)}%</span>
+          <span style="color:var(--text3);font-size:13px">→</span>
+          <span class="badge ${simBadge}">${c.simPct.toFixed(1)}%</span>
+        </div>
+        <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:3px">${c.avgCajas.toFixed(1)} cj &nbsp;→&nbsp; ${c.simCajas} cj por envío</div>
+      </td>
+      <td class="num-right">
+        <strong style="color:var(--green-dark);font-size:14px">${peso(c.ahorro)}</strong><br>
+        <span style="font-size:10px;color:var(--text3)">−${c.mejora.toFixed(1)} pp</span>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -1291,16 +1383,28 @@ function renderTable(){
     if(typeof vA==='string')return sortDir==='asc'?vA.localeCompare(vB):vB.localeCompare(vA);
     return sortDir==='asc'?vA-vB:vB-vA;
   });
-  document.getElementById('main-tbody').innerHTML=filtered.slice(0,300).map(r=>`
-    <tr><td>${r.pid||''}</td><td>${fmtD(r.fecha)}</td><td>${r.mes||''}</td>
-    <td title="${r.razon_social||r.dest}">${r.razon_social||r.dest||''}</td><td>${r.region||''}</td>
+  document.getElementById('main-tbody').innerHTML=filtered.slice(0,300).map(r=>{
+    const uid='tbl'+safePidId(r.pid);
+    const mix=getProdsMix(r.pid);
+    const detContent=mix
+      ?`<strong style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.04em">Composición: </strong><span style="font-size:12px">${mix}</span>`
+      :`<span style="font-size:12px;color:var(--text3)">Sin detalle de productos para este pedido</span>`;
+    return `<tr onclick="togglePedidoDetail('${uid}')" style="cursor:pointer">
+    <td><span id="ico-${uid}" style="color:var(--text3);font-size:10px;margin-right:3px">▸</span>${r.pid||''}</td>
+    <td>${fmtD(r.fecha)}</td><td>${r.mes||''}</td>
+    <td title="${r.razon_social||r.dest}">${r.razon_social||r.dest||''}</td>
+    <td>${r.region||''}</td>
     <td class="num-right">${r.cajas||0}</td><td class="num-right">${peso(r.val_decl)}</td>
     <td class="num-right">${peso(r.total)}</td>
     <td>${r.pct_log!=null?`<span class="badge ${r.semaforo}">${r.pct_log.toFixed(1)}%</span>`:'-'}</td>
     <td>${r.otif?`<span class="badge ${r.otif==='Sí'?'green':'red'}">${r.otif}</span>`:'-'}</td>
     <td class="num-right">${r.dias_klozer!=null?r.dias_klozer+' d':'-'}</td>
-    <td><span class="badge ${r.estado==='Entregado'?'green':r.estado==='Devuelto'?'red':r.estado?'amber':'gray'}">${r.estado||'-'}</span></td></tr>`).join('')||
-    '<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--text3)">Sin resultados</td></tr>';
+    <td><span class="badge ${r.estado==='Entregado'?'green':r.estado==='Devuelto'?'red':r.estado?'amber':'gray'}">${r.estado||'-'}</span></td>
+    </tr>
+    <tr id="det-${uid}" style="display:none">
+      <td colspan="12" style="background:var(--surface2);padding:10px 20px;white-space:normal;border-bottom:2px solid var(--border2)">${detContent}</td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--text3)">Sin resultados</td></tr>';
   renderRankingPedidos(filtered);
 }
 
@@ -1368,15 +1472,23 @@ function renderRankingPedidos(rows){
   tbody.innerHTML=top.map((r,i)=>{
     const causas=analizarCausa(r);
     const causasHtml=causas.map(c=>`<span class="badge ${c.cls}" title="${c.det}" style="font-size:10px;margin-right:4px">${c.tipo}</span>`).join('');
-    return `<tr>
+    const uid='top'+safePidId(r.pid);
+    const mix=getProdsMix(r.pid);
+    const detContent=mix
+      ?`<strong style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.04em">Composición: </strong><span style="font-size:12px">${mix}</span>`
+      :`<span style="font-size:12px;color:var(--text3)">Sin detalle de productos para este pedido</span>`;
+    return `<tr onclick="togglePedidoDetail('${uid}')" style="cursor:pointer">
       <td><strong>${i+1}</strong></td>
-      <td>${r.pid||''}</td>
+      <td><span id="ico-${uid}" style="color:var(--text3);font-size:10px;margin-right:3px">▸</span>${r.pid||''}</td>
       <td title="${r.razon_social||r.dest}">${r.razon_social||r.dest||'-'}</td>
       <td>${r.region||'-'}</td>
       <td class="num-right">${r.cajas||0}</td>
       <td class="num-right"><strong>${peso(r.total)}</strong></td>
       <td>${r.pct_log!=null?`<span class="badge ${r.semaforo}">${r.pct_log.toFixed(1)}%</span>`:'-'}</td>
-      <td style="line-height:1.6">${causasHtml}<div style="font-size:11px;color:var(--text3);margin-top:2px">${causas[0].det}</div></td>
+      <td style="line-height:1.6;white-space:normal;min-width:160px">${causasHtml}<div style="font-size:11px;color:var(--text3);margin-top:2px">${causas[0].det}</div></td>
+    </tr>
+    <tr id="det-${uid}" style="display:none">
+      <td colspan="8" style="background:var(--surface2);padding:10px 20px;white-space:normal;border-bottom:2px solid var(--border2)">${detContent}</td>
     </tr>`;
   }).join('');
 }

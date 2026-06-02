@@ -121,30 +121,39 @@ th[data-sort]:hover{background:var(--border2)}
 
   <!-- DASHBOARD -->
   <div class="page active" id="page-dashboard">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 20px;margin-bottom:20px;display:flex;gap:20px;flex-wrap:wrap;align-items:center">
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;flex-shrink:0">Concepto clave</div>
+      <div style="font-size:12px;color:var(--text2)"><strong style="color:var(--text)">% logístico</strong> = costo del envío ÷ valor de la mercadería. Cuanto más bajo, mejor. Meta de Temple: por debajo del 8%.</div>
+      <div style="display:flex;gap:8px;font-size:12px;flex-wrap:wrap">
+        <span style="color:var(--green-dark);background:var(--green-light);padding:2px 10px;border-radius:20px;font-weight:600">Verde &lt;8% — OK</span>
+        <span style="color:var(--amber-dark);background:var(--amber-light);padding:2px 10px;border-radius:20px;font-weight:600">Amarillo 8–15% — Revisar</span>
+        <span style="color:var(--red-dark);background:var(--red-light);padding:2px 10px;border-radius:20px;font-weight:600">Rojo &gt;15% — Costoso</span>
+      </div>
+    </div>
     <div id="kpi-grid" class="kpi-grid"></div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:24px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
         <h3 style="margin:0;font-size:14px;font-weight:600">📌 Alertas del período</h3>
-        <span style="font-size:11px;color:var(--text3)">Hallazgos automáticos vs mes anterior</span>
+        <span style="font-size:11px;color:var(--text3)">Cambios relevantes detectados automáticamente respecto al mes anterior</span>
       </div>
       <div id="alertas-cont" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
     <div style="margin-bottom:24px">
       <div class="chart-card">
-        <h3>Evolución mensual</h3>
-        <div class="chart-sub">Gasto total (barras) vs % logístico promedio (línea)</div>
+        <h3>Evolución mensual del gasto logístico</h3>
+        <div class="chart-sub">Barras: gasto total en flete cada mes · Línea: % logístico promedio (referencia de eficiencia) · Meta: línea por debajo del 8%</div>
         <div class="chart-wrap" style="height:320px"><canvas id="c-hero"></canvas></div>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1.5fr;gap:16px;margin-bottom:16px">
       <div class="chart-card">
-        <h3>Semáforo logístico</h3>
-        <div class="chart-sub">Distribución por % logístico s/ valor</div>
+        <h3>Semáforo del período</h3>
+        <div class="chart-sub">Cantidad de pedidos según su % logístico · Verde: eficiente · Amarillo: a revisar · Rojo: costoso</div>
         <div class="chart-wrap" style="height:240px"><canvas id="c-semaforo"></canvas></div>
       </div>
       <div class="chart-card">
         <h3>Top 5 destinos del período</h3>
-        <div class="chart-sub">Regiones con mayor cantidad de pedidos</div>
+        <div class="chart-sub">Regiones que concentran más pedidos, cajas y gasto logístico</div>
         <div style="overflow-x:auto;margin-top:8px">
           <table style="width:100%;border-collapse:collapse;font-size:12px">
             <thead style="background:var(--surface2)">
@@ -164,38 +173,42 @@ th[data-sort]:hover{background:var(--border2)}
 
   <!-- COSTOS -->
   <div class="page" id="page-costos">
+    <div class="alert blue" style="margin-bottom:20px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>¿Cuánto gastamos en logística y dónde podemos reducirlo? Esta sección muestra el desglose por región, producto y tamaño de pedido para identificar dónde se concentra el gasto y qué decisiones pueden bajarlo.</div>
+    </div>
     <div class="charts-row charts-2">
-      <div class="chart-card"><h3>Gasto por región</h3><div class="chart-sub">Top regiones por volumen de gasto</div><div class="chart-wrap tall"><canvas id="c-region"></canvas></div></div>
-      <div class="chart-card"><h3>% logístico por tamaño de pedido</h3><div class="chart-sub">A menor cantidad de cajas, mayor % logístico</div><div class="chart-wrap tall"><canvas id="c-cajas"></canvas></div></div>
+      <div class="chart-card"><h3>Gasto total por región</h3><div class="chart-sub">¿A qué zonas enviamos más plata? Las regiones más caras no siempre son las más frecuentes — puede ser el costo por envío</div><div class="chart-wrap tall"><canvas id="c-region"></canvas></div></div>
+      <div class="chart-card"><h3>% logístico según cantidad de cajas por pedido</h3><div class="chart-sub">Pedidos chicos son proporcionalmente mucho más caros · Consolidar cajas en un mismo envío baja el % logístico</div><div class="chart-wrap tall"><canvas id="c-cajas"></canvas></div></div>
     </div>
     <div class="divider"></div>
     <div class="section-header">
-      <h2>Análisis de Pareto por producto</h2>
-      <span class="desc">Los pocos productos que generan la mayor parte del volumen y del gasto logístico</span>
+      <h2>¿Qué productos mueven el gasto? (Pareto 80/20)</h2>
+      <span class="desc">El principio de Pareto dice que pocos productos explican la mayoría del volumen y del costo — acá lo vemos con los datos reales de Temple</span>
     </div>
     <div style="padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:16px;font-size:13px;color:var(--text2)" id="pareto-insight">Calculando...</div>
     <div class="charts-row charts-2">
       <div class="chart-card">
-        <h3>Por volumen (cajas despachadas)</h3>
-        <div class="chart-sub">Top 8 productos · Barras intensas = los que cubren el 80% · Otros agrupados</div>
+        <h3>Productos que más cajas generan</h3>
+        <div class="chart-sub">Top 8 productos por volumen despachado · Barras intensas = los que acumulan el 80% del total · Los demás se agrupan en "Otros"</div>
         <div class="chart-wrap" style="height:340px"><canvas id="c-pareto-vol"></canvas></div>
       </div>
       <div class="chart-card">
-        <h3>Por gasto logístico generado</h3>
-        <div class="chart-sub">Top 8 productos · Barras intensas = los que cubren el 80% · Puede diferir del volumen</div>
+        <h3>Productos que más gasto logístico generan</h3>
+        <div class="chart-sub">No siempre coincide con el volumen — un producto puede tener pocas cajas pero envíos muy chicos (caros) · Barras intensas = 80% del gasto</div>
         <div class="chart-wrap" style="height:340px"><canvas id="c-pareto-gasto"></canvas></div>
       </div>
     </div>
     <div class="charts-row charts-2">
-      <div class="chart-card"><h3>Gasto acumulado en el año</h3><div class="chart-sub">Evolución mensual acumulada</div><div class="chart-wrap tall"><canvas id="c-acumulado"></canvas></div></div>
+      <div class="chart-card"><h3>Gasto logístico acumulado en el año</h3><div class="chart-sub">Suma mensual del gasto total en flete · Útil para proyectar el cierre del año y comparar contra presupuesto</div><div class="chart-wrap tall"><canvas id="c-acumulado"></canvas></div></div>
       <div class="chart-card">
-        <h3>Volumen de entregas y costo promedio por zona</h3>
-        <div class="chart-sub">Barras: cantidad de entregas · Línea: costo promedio por pedido</div>
+        <h3>Cantidad de envíos y costo promedio por zona</h3>
+        <div class="chart-sub">Barras: cuántos pedidos se despachan a cada zona · Línea: cuánto cuesta en promedio cada uno · Zonas con pocos envíos pero costo alto merecen atención</div>
         <div class="chart-wrap tall"><canvas id="c-zona-volumen"></canvas></div>
       </div>
     </div>
     <div class="divider"></div>
-    <div class="section-header"><h2>% logístico real por zona y tamaño de pedido</h2><span class="desc">Promedio histórico de tus pedidos · Verde &lt;8% · Amarillo 8-15% · Rojo &gt;15% · "n ped" = cantidad de pedidos en ese cruce</span></div>
+    <div class="section-header"><h2>Matriz de % logístico por zona y cantidad de cajas</h2><span class="desc">Cada celda muestra el % logístico promedio real para esa combinación zona/cajas · Verde &lt;8% · Amarillo 8–15% · Rojo &gt;15% · "n ped" = pedidos que forman ese promedio</span></div>
     <div class="table-card">
       <div class="table-wrap"><table><thead><tr>
         <th>Zona</th><th class="num-right">1 caja</th><th class="num-right">2-3</th><th class="num-right">4-6</th><th class="num-right">7-10</th><th class="num-right">11-20</th><th class="num-right">21-30</th><th class="num-right">31+</th>
@@ -205,60 +218,79 @@ th[data-sort]:hover{background:var(--border2)}
 
   <!-- CLIENTES -->
   <div class="page" id="page-clientes">
+    <div class="alert blue" style="margin-bottom:20px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>¿Qué clientes nos generan más costo logístico y cómo podemos reducirlo? Acá identificamos los clientes más caros de gestionar, los que piden en volúmenes chicos con frecuencia alta, y estimamos cuánto podríamos ahorrar si consolidaran pedidos.</div>
+    </div>
     <div class="charts-row charts-2">
-      <div class="rank-card"><h3>Top 10 clientes por gasto logístico</h3><div id="rank-gasto"></div></div>
+      <div class="rank-card"><h3>Top 10 clientes por gasto logístico total</h3><div id="rank-gasto"></div></div>
       <div class="rank-card"><h3>Clientes con % logístico más alto</h3><div id="rank-pctlog"></div></div>
     </div>
     <div class="divider"></div>
-    <div class="section-header"><h2>Clientes en zona roja</h2><span class="desc">Pedidos consistentemente por encima del 15%</span></div>
+    <div class="section-header"><h2>Clientes en zona roja</h2><span class="desc">Clientes cuyos pedidos superan el 15% de costo logístico de forma habitual — suelen pedir pocas cajas o estar en zonas lejanas</span></div>
     <div class="table-card">
-      <div class="table-header"><h3>Clientes con más pedidos rojos</h3></div>
+      <div class="table-header"><h3>Clientes con más pedidos en rojo (&gt;15% logístico)</h3></div>
       <div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Pedidos totales</th><th>Pedidos rojos</th><th>% en rojo</th><th>Cajas prom.</th><th>% logístico prom.</th><th>Región</th></tr></thead><tbody id="clientes-rojos-tbody"></tbody></table></div>
     </div>
 
     <div class="divider"></div>
     <div class="section-header">
-      <h2>Análisis de frecuencia de envíos</h2>
-      <span class="desc">Simulación del impacto de consolidar pedidos a cada 15 días (doble de cajas por envío)</span>
+      <h2>Oportunidad de consolidación de pedidos</h2>
+      <span class="desc">¿Qué pasa si estos clientes piden cada 15 días en lugar de cada semana? Simulamos duplicar las cajas por envío y calculamos el ahorro en flete</span>
     </div>
+    <div style="display:flex;align-items:center;gap:14px;padding:14px 20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:16px;flex-wrap:wrap">
+      <div style="font-size:13px;color:var(--text2);font-weight:500;flex-shrink:0">Simular pedidos cada:</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="frec-btn" data-days="7"  onclick="setFrecInterval(7,this)"  style="padding:5px 14px;border:1px solid var(--border2);border-radius:20px;font-size:13px;cursor:pointer;background:var(--surface);color:var(--text2)">7 días</button>
+        <button class="frec-btn" data-days="10" onclick="setFrecInterval(10,this)" style="padding:5px 14px;border:1px solid var(--blue);border-radius:20px;font-size:13px;cursor:pointer;background:var(--blue);color:#fff;font-weight:600">10 días</button>
+        <button class="frec-btn" data-days="15" onclick="setFrecInterval(15,this)" style="padding:5px 14px;border:1px solid var(--border2);border-radius:20px;font-size:13px;cursor:pointer;background:var(--surface);color:var(--text2)">15 días</button>
+        <button class="frec-btn" data-days="21" onclick="setFrecInterval(21,this)" style="padding:5px 14px;border:1px solid var(--border2);border-radius:20px;font-size:13px;cursor:pointer;background:var(--surface);color:var(--text2)">21 días</button>
+        <button class="frec-btn" data-days="30" onclick="setFrecInterval(30,this)" style="padding:5px 14px;border:1px solid var(--border2);border-radius:20px;font-size:13px;cursor:pointer;background:var(--surface);color:var(--text2)">30 días</button>
+      </div>
+      <div style="font-size:12px;color:var(--text3)">Solo aparecen bars que hoy piden <em>más seguido</em> que el intervalo elegido</div>
+    </div>
+    <div id="frec-summary" style="display:none;margin-bottom:12px;padding:14px 20px;background:var(--green-light);border:1px solid #86efac;border-radius:var(--radius-lg);font-size:13px;color:var(--green-dark)"></div>
     <div class="table-card" style="margin-bottom:32px">
       <div class="table-header">
-        <h3>Clientes con mayor potencial de mejora</h3>
-        <span style="font-size:12px;color:var(--text3)">Clientes con 2+ pedidos en el período · ordenados por ahorro estimado</span>
+        <h3>Clientes con mayor potencial de ahorro por consolidación</h3>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--text3)">Solo clientes con 2+ pedidos más frecuentes que el intervalo elegido</span>
+          <input type="text" id="frec-search" placeholder="Buscar cliente..." oninput="renderChartsClientes()" style="font-size:12px;padding:5px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);width:180px;outline:none">
+        </div>
       </div>
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>Cliente</th>
-            <th>Región</th>
-            <th>Producto principal</th>
-            <th class="num-right">Pedidos</th>
-            <th class="num-right">Situación actual<br><span style="font-weight:400;font-size:10px">cajas prom. · % log.</span></th>
-            <th class="num-right">Cada 15 días<br><span style="font-weight:400;font-size:10px">cajas × 2 · % estimado</span></th>
-            <th class="num-right">Cajas mín. p/verde<br><span style="font-weight:400;font-size:10px">para llegar a &lt;8%</span></th>
+            <th>Bar / cliente<br><span style="font-weight:400;font-size:10px">región · producto principal</span></th>
+            <th class="num-right">Hoy pide<br><span style="font-weight:400;font-size:10px">pedidos · cada cuánto</span></th>
+            <th class="num-right" id="frec-th-sim">% actual → cada X días<br><span style="font-weight:400;font-size:10px" id="frec-th-sim-sub">cajas actuales → cajas simuladas</span></th>
             <th class="num-right">Ahorro estimado</th>
           </tr></thead>
           <tbody id="frecuencia-tbody"></tbody>
         </table>
       </div>
-      <div style="margin-top:12px;padding:12px 16px;background:var(--surface2);border-radius:var(--radius);font-size:12px;color:var(--text3)">
-        <strong>Cómo se calcula:</strong> "Cada 15 días" simula duplicar las cajas por envío con la tarifa real de Klozer. "Cajas mín. p/verde" es el mínimo de cajas por pedido para que el % logístico baje del 8%, basado en el valor de mercadería promedio del cliente.
+      <div id="frec-nota" style="margin-top:12px;padding:12px 16px;background:var(--surface2);border-radius:var(--radius);font-size:12px;color:var(--text3)">
+        <strong>Cómo se calcula:</strong> Se toma la fecha del primer y último pedido de cada cliente para calcular su intervalo promedio real. La simulación calcula cuántos pedidos haría en ese mismo período al nuevo ritmo y cuántas cajas promedio llevaría cada uno. El flete se recalcula con la tarifa vigente de Klozer. "Cajas mín. p/verde" es el mínimo para bajar del 8% basado en el valor de mercadería promedio del cliente.
       </div>
     </div>
   </div>
 
   <!-- SERVICIO -->
   <div class="page" id="page-servicio">
+    <div class="alert blue" style="margin-bottom:20px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>¿Qué tan bien llegan los pedidos? Esta sección mide el nivel de servicio de Klozer (el operador logístico) y la eficiencia interna de preparación. <strong>OTIF</strong> (On Time In Full) = % de pedidos entregados a tiempo y sin faltantes. Meta: &gt;85%.</div>
+    </div>
     <div class="kpi-grid" id="kpi-servicio"></div>
     <div class="charts-row charts-2">
-      <div class="chart-card"><h3>OTIF por mes</h3><div class="chart-sub">Evolución del nivel de servicio · Meta &gt;85%</div><div class="chart-wrap"><canvas id="c-otif"></canvas></div></div>
-      <div class="chart-card"><h3>Incidencias por tipo</h3><div class="chart-sub">Cantidad por tipo de problema</div><div class="chart-wrap"><canvas id="c-incidencias"></canvas></div></div>
+      <div class="chart-card"><h3>OTIF mensual (entregas a tiempo y completas)</h3><div class="chart-sub">% de pedidos que llegaron en tiempo y forma cada mes · La línea punteada marca la meta del 85% · Por debajo implica reclamos o retrasos</div><div class="chart-wrap"><canvas id="c-otif"></canvas></div></div>
+      <div class="chart-card"><h3>Tipos de incidencias logísticas</h3><div class="chart-sub">Clasificación de los problemas registrados: demoras, faltantes, roturas, devoluciones, etc.</div><div class="chart-wrap"><canvas id="c-incidencias"></canvas></div></div>
     </div>
     <div class="divider"></div>
-    <div class="section-header"><h2>Preparación interna vs. Klozer</h2><span class="desc">Días promedio en cada etapa</span></div>
+    <div class="section-header"><h2>¿Cuánto tarda cada etapa del envío?</h2><span class="desc">Días promedio que demora la preparación interna (Temple) vs. el traslado por Klozer · Ayuda a identificar dónde se pierde tiempo</span></div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:24px"><div id="comp-tiempos"></div></div>
     <div class="divider"></div>
-    <div class="section-header"><h2>Incidencia logística por mes</h2><span class="desc">Pedidos por semáforo (barras) · % logístico promedio (línea)</span></div>
+    <div class="section-header"><h2>Evolución del semáforo logístico por mes</h2><span class="desc">Barras apiladas: cantidad de pedidos en verde, amarillo y rojo cada mes · Línea: % logístico promedio · Sirve para ver si la eficiencia mejora o empeora con el tiempo</span></div>
     <div class="chart-card" style="margin-bottom:16px">
       <div class="chart-wrap" style="height:300px"><canvas id="c-pct-tendencia"></canvas></div>
     </div>
@@ -268,7 +300,7 @@ th[data-sort]:hover{background:var(--border2)}
   <div class="page" id="page-reglas">
     <div class="alert blue" style="margin-bottom:20px">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <div>Herramienta para comerciales. Elegí la zona y el descuento — ves exactamente cuántas unidades mínimas necesitás de cada producto para que el envío sea rentable.</div>
+      <div><strong>Herramienta para el equipo comercial.</strong> Seleccioná la zona de destino y el descuento que le vas a dar al cliente — el tablero te muestra exactamente cuántas cajas mínimas necesitás vender de cada producto para que el envío no supere el 8% logístico. Así podés negociar pedidos sabiendo el piso de rentabilidad.</div>
     </div>
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:16px 20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:20px">
       <div>
@@ -302,18 +334,22 @@ th[data-sort]:hover{background:var(--border2)}
 
   <!-- COMPARADOR -->
   <div class="page" id="page-comparador">
+    <div class="alert blue" style="margin-bottom:20px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>Compará cualquier par de meses para ver si mejoramos o empeoramos en costos, volumen y calidad de servicio. Los dos últimos meses con datos se pre-seleccionan automáticamente.</div>
+    </div>
     <div class="cmp-selectors">
       <label>Mes A</label>
       <select id="cmp-mes-a" onchange="renderComparador()"><option value="">Seleccionar...</option></select>
       <span class="cmp-vs">vs</span>
       <label>Mes B</label>
       <select id="cmp-mes-b" onchange="renderComparador()"><option value="">Seleccionar...</option></select>
-      <span style="font-size:12px;color:var(--text3);margin-left:8px">Los dos últimos meses se pre-seleccionan automáticamente</span>
+      <span style="font-size:12px;color:var(--text3);margin-left:8px">Los dos últimos meses con datos se pre-seleccionan automáticamente</span>
     </div>
     <div id="cmp-panel" style="display:none">
       <div class="cmp-grid">
         <div class="table-card">
-          <div class="table-header"><h3>Métricas comparadas</h3></div>
+          <div class="table-header"><h3>Métricas comparadas mes a mes</h3></div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Métrica</th><th class="num-right" id="cmp-header-a">Mes A</th><th class="num-right" id="cmp-header-b">Mes B</th><th class="num-right">Variación</th></tr></thead>
@@ -333,9 +369,13 @@ th[data-sort]:hover{background:var(--border2)}
 
   <!-- PEDIDOS -->
   <div class="page" id="page-pedidos">
+    <div class="alert blue" style="margin-bottom:20px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div>Detalle completo de todos los pedidos. Podés filtrar por región, semáforo de costo o cliente, y exportar a Excel. El filtro de mes del encabezado aplica acá también.</div>
+    </div>
     <div class="section-header">
-      <h2>Top 20 pedidos con mayor costo logístico</h2>
-      <span class="desc">Los pedidos más caros del filtro actual y la razón principal del costo elevado</span>
+      <h2>Top 20 pedidos más caros del período</h2>
+      <span class="desc">Los pedidos que más gastaron en flete en el filtro actual — incluye el diagnóstico de por qué fueron costosos (pocas cajas, zona lejana, etc.)</span>
     </div>
     <div class="table-card" style="margin-bottom:24px">
       <div class="table-wrap">
@@ -385,7 +425,7 @@ th[data-sort]:hover{background:var(--border2)}
             <th data-sort="fecha" onclick="sortTable('fecha')">Fecha <span class="sort-icon">↓</span></th>
             <th>Mes</th><th>Cliente</th><th>Región</th>
             <th class="num-right" data-sort="cajas" onclick="sortTable('cajas')">Cajas <span class="sort-icon">↕</span></th>
-            <th class="num-right">Valor decl.</th>
+            <th class="num-right">Valor declarado</th>
             <th class="num-right" data-sort="total" onclick="sortTable('total')">Total flete <span class="sort-icon">↕</span></th>
             <th data-sort="pct_log" onclick="sortTable('pct_log')">% Logístico <span class="sort-icon">↕</span></th>
             <th>OTIF</th><th class="num-right">Días Klozer</th><th>Estado</th>
@@ -400,7 +440,7 @@ th[data-sort]:hover{background:var(--border2)}
   <div class="page" id="page-simulador">
     <div class="alert blue">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <div>Cargá los productos del pedido y la zona de destino para calcular el costo logístico exacto.</div>
+      <div><strong>Calculá el costo de un pedido antes de cotizarlo.</strong> Elegí la zona, cargá los productos y cantidades — el simulador calcula el costo logístico exacto con la tarifa vigente de Klozer y te dice si el pedido es verde, amarillo o rojo. También podés buscar por código postal para identificar la zona automáticamente.</div>
     </div>
     <div class="sim-grid">
       <div class="sim-input-card">
@@ -496,7 +536,7 @@ th[data-sort]:hover{background:var(--border2)}
       </div>
     </div>
     <div class="divider"></div>
-    <div class="section-header"><h2>% logístico real por zona y tamaño de pedido</h2><span class="desc">Tu historial: promedio real por combinación zona/cajas · Te dice qué pasa cuando mandás X cajas a Y zona</span></div>
+    <div class="section-header"><h2>Referencia histórica: % logístico real por zona y cantidad de cajas</h2><span class="desc">Promedio real de tus propios pedidos · Usalo como referencia para entender qué % logístico esperás según la zona y las cajas del pedido que estás armando</span></div>
     <div class="table-card">
       <div class="table-wrap">
         <table>
@@ -508,7 +548,7 @@ th[data-sort]:hover{background:var(--border2)}
       </div>
     </div>
     <div class="divider"></div>
-    <div class="section-header"><h2>Tarifario Klozer</h2><span class="desc">Costo por caja según zona y cantidad — Tarifa vigente</span></div>
+    <div class="section-header"><h2>Tarifario Klozer (costo por caja, tarifa vigente)</h2><span class="desc">Costo unitario por caja según zona de destino y tramo de cantidad · El simulador usa estos valores para calcular el flete</span></div>
     <div class="table-card">
       <div class="tarifario-wrap">
         <table>
