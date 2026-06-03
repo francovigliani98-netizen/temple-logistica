@@ -64,6 +64,21 @@
       <div id="precios-msg" style="display:none;margin-top:12px"></div>
     </div>
 
+    <!-- SEGURO -->
+    <div class="upload-section">
+      <h3>🛡️ Porcentaje de seguro</h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:16px">El seguro que cobra la logística sobre el valor declarado de la mercadería. Se usa en el simulador, la tabla de mínimos y el cálculo del % logístico. Si Klozer lo cambia, actualizalo acá una sola vez.</p>
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Seguro (%)</div>
+          <input type="number" id="seguro-input" value="1.2" min="0" max="100" step="0.1"
+            style="width:120px;padding:9px 12px;border:1px solid var(--border2);border-radius:var(--radius);font-size:14px;font-weight:600;outline:none;box-sizing:border-box">
+        </div>
+        <button class="btn btn-primary" onclick="saveSeguro()">Guardar seguro</button>
+      </div>
+      <div id="seguro-msg" style="display:none;margin-top:12px"></div>
+    </div>
+
     <!-- UPLOAD -->
     <div class="upload-section">
       <h3>📤 Cargar nuevos datos</h3>
@@ -249,6 +264,35 @@ async function savePrecios() {
       await logAudit('UPDATE_PRECIOS', 'precios', `${cambios.length} producto(s) modificado(s)`, { cambios });
     }
     msg.className='status-msg success'; msg.textContent='✓ Precios actualizados correctamente.';
+  } else {
+    msg.className='status-msg error'; msg.textContent='Error: '+error.message;
+  }
+  msg.style.display='block';
+  setTimeout(()=>msg.style.display='none', 4000);
+}
+
+// ---- SEGURO ----
+async function loadSeguro() {
+  await loadConfig(); // setea la variable global SEGURO
+  const inp = document.getElementById('seguro-input');
+  if (inp) inp.value = (SEGURO * 100).toString();
+}
+
+async function saveSeguro() {
+  const msg = document.getElementById('seguro-msg');
+  const pct = parseFloat(document.getElementById('seguro-input')?.value);
+  if (isNaN(pct) || pct < 0 || pct > 100) {
+    msg.className='status-msg error'; msg.textContent='Ingresá un porcentaje válido (0 a 100).';
+    msg.style.display='block'; return;
+  }
+  const valor = Math.round((pct/100) * 1e6) / 1e6; // ej. 1,2% -> 0.012
+  const antes = SEGURO;
+  const { error } = await supabaseClient.from('config')
+    .upsert({ clave:'seguro', valor, updated_at:new Date().toISOString() }, { onConflict:'clave' });
+  if (!error) {
+    SEGURO = valor;
+    if (antes !== valor) await logAudit('UPDATE_CONFIG', 'config', `Seguro: ${(antes*100).toFixed(1)}% → ${pct}%`, { antes, despues: valor });
+    msg.className='status-msg success'; msg.textContent=`✓ Seguro actualizado a ${pct}%.`;
   } else {
     msg.className='status-msg error'; msg.textContent='Error: '+error.message;
   }
@@ -529,6 +573,7 @@ async function uploadTarifario() {
 // ---- HISTORIAL DE CAMBIOS ----
 const AUDIT_LABELS = {
   UPDATE_PRECIOS:      'Precios editados',
+  UPDATE_CONFIG:       'Configuración editada',
   UPLOAD_TARIFARIO:    'Tarifario subido',
   UPLOAD_LISTA_PRECIOS:'Lista de precios',
   UPLOAD_PEDIDOS:      'Pedidos cargados',
@@ -605,6 +650,7 @@ function showPanel(){
   loadUploadHistory();
   loadUsers();
   loadPrecios();
+  loadSeguro();
   loadAuditLog();
 }
 </script>

@@ -169,7 +169,7 @@ function processToRows(factData, pedData) {
     const pctLog = valDecl>0?Math.round(total/valDecl*1000)/10:null;
     const semaforo = pctLog==null?'':(pctLog<8?'verde':pctLog<15?'amarillo':'rojo');
     const costoAbril = calcFlete(region,cajas,pallets);
-    const totalAbril = costoAbril!=null?costoAbril+valDecl*0.012:null;
+    const totalAbril = costoAbril!=null?costoAbril+valDecl*SEGURO:null;
 
     rows.push({
       pid, fecha: fecha?fecha.toISOString().split('T')[0]:null,

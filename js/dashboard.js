@@ -109,6 +109,7 @@ async function loadData(){
     if(emailEl) emailEl.textContent=session.user.email;
 
     // Cargar datos con timeouts individuales
+    try{ await withTimeout(loadConfig(),5000); }catch(e){ console.warn('loadConfig timeout',e); }
     try{ await withTimeout(loadPrices(),5000); }catch(e){ console.warn('loadPrices timeout',e); }
     try{ await withTimeout(loadTarifario(),5000); }catch(e){ console.warn('loadTarifario timeout',e); }
     try{ await withTimeout(loadListaPrecios(),5000); }catch(e){ console.warn('loadListaPrecios timeout',e); }
@@ -1580,7 +1581,7 @@ function calcSim(){
   const palletsAuto=cajasFlete>=31?Math.ceil(cajasFlete/31):0;
   const fleteCajas=calcFlete(region,cajasFlete,palletsAuto)||0;
   const flete=fleteCajas+fletePallets;
-  const seguro=totalValorFinal*0.012;
+  const seguro=totalValorFinal*SEGURO;
   const totalLog=flete+seguro;
   const pctLista=totalValorLista>0?totalLog/totalValorLista*100:0;
   const pctFinal=totalValorFinal>0?totalLog/totalValorFinal*100:0;
@@ -1598,6 +1599,7 @@ function calcSim(){
   el('sim-pct-val-desc').textContent=pctFinal.toFixed(1)+'%';
   el('sim-pct-val-desc').style.color=pctFinal<8?COLORS.green:pctFinal<15?COLORS.amber:COLORS.red;
   el('sim-costo-flete').textContent=peso(flete);
+  const segLbl=el('sim-seguro-label'); if(segLbl) segLbl.textContent=`Seguro (${(SEGURO*100).toFixed(1).replace('.',',')}%)`;
   el('sim-seguro').textContent=peso(seguro);
   el('sim-total-log').textContent=peso(totalLog);
   el('sim-costo-caja').textContent=peso(costoCaja)+'/cj';
@@ -1641,7 +1643,7 @@ function calcSim(){
         const newPallets=newCajas>=31?Math.ceil(newCajas/31):0;
         const newFlete=calcFlete(region,newCajas,newPallets)||0;
         const newValor=totalValorFinal + extraU*valorAporta;
-        const newSeguro=newValor*0.012;
+        const newSeguro=newValor*SEGURO;
         const newPct=(newFlete+newSeguro)/newValor*100;
         if(newPct<8){
           const extraValor=extraU*valorAporta;
@@ -1672,7 +1674,7 @@ function calcSim(){
         const newPallets=newCajas>=31?Math.ceil(newCajas/31):0;
         const newFlete=calcFlete(region,newCajas,newPallets)||0;
         const newValor=totalValorFinal + extraU*precioU;
-        const newSeguro=newValor*0.012;
+        const newSeguro=newValor*SEGURO;
         const newPct=(newFlete+newSeguro)/newValor*100;
         if(newPct<8){
           const extraValor=extraU*precioU;
@@ -1696,7 +1698,7 @@ function calcSim(){
     // SUGERENCIA 3: aumentar valor del pedido manual (si lo usaron)
     if(cajasManual>0&&valorManual>0){
       // Buscar cuánto valor extra hace falta para llegar a 8% sin cambiar cajas
-      const valNecesario=flete/(0.08-0.012);
+      const valNecesario=flete/(0.08-SEGURO);
       const valExtra=valNecesario-totalValorFinal;
       if(valExtra>0){
         sugerencias.push({
@@ -1840,7 +1842,7 @@ function renderReglasVenta(){
       const valorLista=precioU*u;
       const valorFinal=valorLista*(1-desc/100);
       const flete=calcFlete(zona,Math.ceil(cajas),cajas>=31?Math.ceil(cajas/31):0)||0;
-      const totalLog=flete+valorLista*0.012; // seguro 1,2% sobre el valor de mercadería (no el descontado)
+      const totalLog=flete+valorLista*SEGURO; // seguro sobre el valor de mercadería (no el descontado)
       const pct=valorFinal>0?totalLog/valorFinal*100:999;
       if(pct<8){minUnidades=u;pctFinal=pct;break;}
     }
@@ -1884,7 +1886,7 @@ function renderReglasVenta(){
       if(flete<=0) continue;
       const valorLista=ref.valor*n;
       const valorFinal=valorLista*factorDesc;
-      const seguro=valorLista*0.012; // 1,2% sobre el valor de mercadería (no el descontado)
+      const seguro=valorLista*SEGURO; // seguro sobre el valor de mercadería (no el descontado)
       const pct=valorFinal>0?(flete+seguro)/valorFinal*100:999;
       if(pct<umbral){
         const lista=ref.valor*n, r1k=v=>Math.round(v/1000)*1000;
