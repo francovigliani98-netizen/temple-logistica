@@ -1851,7 +1851,7 @@ function renderReglasVenta(){
       const valorFinal=valorLista*(1-desc/100);
       const flete=calcFlete(zona,Math.ceil(cajas),cajas>=31?Math.ceil(cajas/31):0)||0;
       if(flete<=0) continue;
-      const totalLog=flete+valorLista*SEGURO; // seguro sobre el valor de mercadería (no el descontado)
+      const totalLog=flete+valorFinal*SEGURO; // seguro sobre el valor con descuento (igual que el simulador)
       const pct=valorFinal>0?totalLog/valorFinal*100:999;
       if(floorPct==null||pct<floorPct-1e-9){floorPct=pct;floorU=u;}
       if(pct<8&&min8==null) min8={u,pct};
@@ -1905,7 +1905,7 @@ function renderReglasVenta(){
       const flete=calcFlete(zona,n,0)||0;
       if(flete<=0) continue;
       const valorLista=Vcaja*n, valorFinal=valorLista*factorDesc;
-      const pct=valorFinal>0?(flete+valorLista*SEGURO)/valorFinal*100:999; // % sobre precio de venta
+      const pct=valorFinal>0?(flete+valorFinal*SEGURO)/valorFinal*100:999; // seguro sobre valor con descuento (igual que el simulador)
       const info={lista:r1k(valorLista), final:r1k(valorFinal), pct};
       if(mejor==null||pct<mejor.pct-1e-9) mejor=info;
       if(pct<8&&!verde) verde=info;
