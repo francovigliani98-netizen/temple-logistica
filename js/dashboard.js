@@ -1024,49 +1024,49 @@ function renderComparador(){
     cmpRow('Pedidos rojos',      mA.rojos,         mB.rojos,         num, false),
   ].join('');
 
-  // Gráfico de barras horizontales dobles (reemplaza radar)
-  const barLabels=['Gasto total','Cajas prom./pedido','% logístico','OTIF (%)','Pedidos rojos'];
-  const barDataA=[
-    Math.round(mA.total/1000),
-    Math.round(mA.totalCajas/(mA.count||1)*10)/10,
-    Math.round(mA.avgPct*10)/10,
-    Math.round(mA.otif*10)/10,
-    mA.rojos
+  // Gráfico de variación % por métrica (mes A → mes B): misma escala para todas,
+  // color por mejora (verde) o empeoramiento (rojo). Las barras divergen del 0:
+  // a la derecha si subió, a la izquierda si bajó; el color indica si es bueno o malo.
+  const cmpMetrics=[
+    {label:'Facturación',   a:mA.facturado,     b:mB.facturado,     up:true},
+    {label:'Clientes',      a:mA.clientes,      b:mB.clientes,      up:true},
+    {label:'Cajas/pedido',  a:mA.cajasPorPedido,b:mB.cajasPorPedido,up:true},
+    {label:'% verdes',      a:mA.pctVerdes,     b:mB.pctVerdes,     up:true},
+    {label:'OTIF',          a:mA.otif,          b:mB.otif,          up:true},
+    {label:'Gasto flete',   a:mA.total,         b:mB.total,         up:false},
+    {label:'% logístico',   a:mA.avgPct,        b:mB.avgPct,        up:false},
+    {label:'Pedidos rojos', a:mA.rojos,         b:mB.rojos,         up:false},
   ];
-  const barDataB=[
-    Math.round(mB.total/1000),
-    Math.round(mB.totalCajas/(mB.count||1)*10)/10,
-    Math.round(mB.avgPct*10)/10,
-    Math.round(mB.otif*10)/10,
-    mB.rojos
-  ];
-  const barSuffixes=['k','cj','%','%',''];
+  const cmpCalc=cmpMetrics.map(m=>{
+    const ch=m.a?(m.b-m.a)/Math.abs(m.a)*100:0;
+    const neutral=Math.abs(ch)<0.5;
+    const improved=m.up?ch>0:ch<0;
+    return {label:m.label, ch:Math.round(ch*10)/10, improved, neutral};
+  });
   mkChart('c-radar-cmp',{
     type:'bar',
     data:{
-      labels:barLabels,
-      datasets:[
-        {label:mesA,data:barDataA,backgroundColor:'rgba(37,99,235,0.8)',borderRadius:4,borderSkipped:false},
-        {label:mesB,data:barDataB,backgroundColor:'rgba(217,119,6,0.8)',borderRadius:4,borderSkipped:false}
-      ]
+      labels:cmpCalc.map(c=>c.label),
+      datasets:[{
+        label:'Variación %',
+        data:cmpCalc.map(c=>c.ch),
+        backgroundColor:cmpCalc.map(c=>c.neutral?'rgba(148,163,184,0.6)':c.improved?'rgba(22,163,74,0.85)':'rgba(220,38,38,0.85)'),
+        borderRadius:4,borderSkipped:false
+      }]
     },
     options:{
       indexAxis:'y',
       responsive:true,
       maintainAspectRatio:false,
-      interaction:{mode:'index',intersect:false},
       plugins:{
-        legend:{position:'bottom',labels:{color:textC,font:{size:12},boxWidth:14,padding:14}},
+        legend:{display:false},
         tooltip:{callbacks:{
-          label:c=>{
-            const suf=barSuffixes[c.dataIndex]||'';
-            return `${c.dataset.label}: ${c.raw}${suf}`;
-          }
+          label:c=>`${c.raw>0?'+':''}${c.raw}%  (${mesA} → ${mesB})`
         }}
       },
       scales:{
-        x:{grid:{color:gridC},ticks:{color:textC,font:{size:11}}},
-        y:{grid:{display:false},ticks:{color:textC,font:{size:12},font:{weight:'500'}}}
+        x:{grid:{color:gridC},ticks:{color:textC,font:{size:11},callback:v=>v+'%'}},
+        y:{grid:{display:false},ticks:{color:textC,font:{size:12,weight:'500'}}}
       }
     }
   });
