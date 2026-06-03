@@ -1859,17 +1859,41 @@ function renderReglasVenta(){
   const rentables=results.filter(r=>r.minUnidades).sort((a,b)=>a.minUnidades-b.minUnidades);
   const noRentables=results.filter(r=>!r.minUnidades);
 
-  // Calcular mínimo de valor total para cualquier combo
-  const flete1=calcFlete(zona,1,0)||0;
-  // Valor mínimo del pedido considerando el descuento
-  // Si hay descuento, el valor con descuento tiene que superar el mínimo
-  // flete + valor*desc*0.012 < valor*desc*0.08
-  // → valor*desc*(0.08-0.012) > flete1
-  // → valor > flete1 / ((1-desc/100) * 0.068)
+  // ---- PEDIDO MÍNIMO EN $ (para vendedores) ----
+  // En vez de asumir el flete de 1 sola caja (que daba un mínimo irreal),
+  // tomamos un valor por caja representativo (mediana real de los pedidos de la
+  // zona) y buscamos cuántas cajas hacen falta para que el flete real caiga por
+  // debajo del 8%. El % logístico ≈ tarifa_por_caja / valor_por_caja, así que el
+  // mínimo lo marca el salto a un bracket de tarifa más barato (más volumen).
   const factorDesc = (1 - desc/100);
-  const valMinimoLista = flete1>0 ? flete1 / (factorDesc * 0.068) : null;
-  const valMinimoFinal = valMinimoLista ? Math.round(valMinimoLista * factorDesc / 1000) * 1000 : null;
-  const valMinimoListaRedondeado = valMinimoLista ? Math.round(valMinimoLista / 1000) * 1000 : null;
+  function valorPorCajaRef(z){
+    const ok=r=>r.val_decl>0&&r.cajas>0;
+    let base=allRows.filter(r=>r.region===z&&ok(r));
+    const zonal=base.length>=5;
+    if(!zonal) base=allRows.filter(ok);
+    if(!base.length) return null;
+    const vals=base.map(r=>r.val_decl/r.cajas).sort((a,b)=>a-b);
+    return {valor:vals[Math.floor(vals.length/2)], zonal}; // mediana (robusta a outliers)
+  }
+  const ref=valorPorCajaRef(zona);
+  // Mínimo de cajas (y su valor de pedido) para quedar por debajo de un umbral de % logístico
+  function minPedido(umbral){
+    if(!ref||!ref.valor) return null;
+    for(let n=1;n<=30;n++){
+      const flete=calcFlete(zona,n,0)||0;
+      if(flete<=0) continue;
+      const valorFinal=ref.valor*n*factorDesc;
+      const pct=valorFinal>0?(flete+valorFinal*0.012)/valorFinal*100:999;
+      if(pct<umbral){
+        const lista=ref.valor*n, r1k=v=>Math.round(v/1000)*1000;
+        return {cajas:n, lista:r1k(lista), final:r1k(lista*factorDesc), pct};
+      }
+    }
+    return null;
+  }
+  const verde=minPedido(8);          // rentable (<8%)
+  const amarillo=verde?null:minPedido(15); // si no llega a verde, mínimo para no entrar en rojo
+  const valorCajaR = ref?Math.round(ref.valor/1000)*1000:null;
 
   cont.innerHTML=`
     <!-- Header con contexto -->
@@ -1878,14 +1902,24 @@ function renderReglasVenta(){
         <div style="font-size:12px;color:var(--text2);margin-bottom:2px">Zona seleccionada</div>
         <div style="font-size:18px;font-weight:700;color:var(--text)">${zona}</div>
       </div>
-      ${valMinimoFinal ? `<div style="flex:1;min-width:240px;padding:14px 18px;background:rgba(37,99,235,0.06);border:1px solid rgba(37,99,235,0.18);border-radius:var(--radius-lg)">
-        <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">📦 Mínimo para que el envío sea rentable</div>
-        <div style="font-size:26px;font-weight:800;color:var(--blue);margin-bottom:6px">$${valMinimoFinal.toLocaleString('es-AR')} <span style="font-size:14px;font-weight:400;color:var(--text2)">en mercadería${desc>0?' (con descuento)':''}</span></div>
+      ${!ref ? '' : verde ? `<div style="flex:1;min-width:240px;padding:14px 18px;background:rgba(37,99,235,0.06);border:1px solid rgba(37,99,235,0.18);border-radius:var(--radius-lg)">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">📦 Pedido mínimo para que sea rentable</div>
+        <div style="font-size:26px;font-weight:800;color:var(--blue);margin-bottom:6px">$${verde.lista.toLocaleString('es-AR')} <span style="font-size:14px;font-weight:400;color:var(--text2)">a precio de lista</span></div>
         <div style="font-size:13px;color:var(--text2);line-height:1.5">
-          Si el pedido suma más de <strong>$${valMinimoFinal.toLocaleString('es-AR')}</strong>${desc>0?` después del ${desc}% de descuento`:''}, el flete va a representar menos del 8% del valor.<br>
-          ${desc>0?`<span style="color:var(--text3);font-size:12px">En precio de lista: el pedido tiene que superar $${valMinimoListaRedondeado.toLocaleString('es-AR')} antes del descuento.</span>`:'Si el pedido no llega a ese monto, conveniene agregar más productos o combinar con otro pedido al mismo destino.'}
+          Un pedido a esta zona conviene que sea de al menos <strong>$${verde.lista.toLocaleString('es-AR')}</strong> (≈ ${verde.cajas} caja${verde.cajas>1?'s':''}) para que el flete quede por debajo del 8%.${desc>0?`<br><span style="color:var(--text3);font-size:12px">Con ${desc}% de descuento eso equivale a $${verde.final.toLocaleString('es-AR')} facturados.</span>`:''}
+          <br><span style="color:var(--text3);font-size:11px">Calculado con el valor típico de tus pedidos ${ref.zonal?'en esta zona':'(promedio general)'}: ~$${valorCajaR.toLocaleString('es-AR')} por caja.</span>
         </div>
-      </div>` : ''}
+      </div>` : amarillo ? `<div style="flex:1;min-width:240px;padding:14px 18px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.22);border-radius:var(--radius-lg)">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">📦 Pedido mínimo para no entrar en rojo</div>
+        <div style="font-size:26px;font-weight:800;color:#b45309;margin-bottom:6px">$${amarillo.lista.toLocaleString('es-AR')} <span style="font-size:14px;font-weight:400;color:var(--text2)">a precio de lista</span></div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.5">
+          Con el valor típico de tus pedidos (~$${valorCajaR.toLocaleString('es-AR')}/caja) esta zona <strong>no llega al 8%</strong> ni con volumen. El mínimo para mantenerlo bajo 15% (no rojo) es <strong>$${amarillo.lista.toLocaleString('es-AR')}</strong> (≈ ${amarillo.cajas} caja${amarillo.cajas>1?'s':''}).${desc>0?`<br><span style="color:var(--text3);font-size:12px">Con ${desc}% de descuento: $${amarillo.final.toLocaleString('es-AR')} facturados.</span>`:''}
+          <br><span style="color:var(--text3);font-size:11px">Para que sea verde hay que subir el valor por caja (productos más caros) o cobrar el flete aparte.</span>
+        </div>
+      </div>` : `<div style="flex:1;min-width:240px;padding:14px 18px;background:rgba(220,38,38,0.06);border:1px solid rgba(220,38,38,0.18);border-radius:var(--radius-lg)">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">⚠️ Zona difícil de hacer rentable</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.5">Con el valor típico de tus pedidos (~$${valorCajaR.toLocaleString('es-AR')}/caja), el flete a esta zona no baja del 15% ni sumando volumen${desc>0?` con ${desc}% de descuento`:''}. Para que convenga hay que subir bastante el valor por caja o cobrar el flete aparte.</div>
+      </div>`}
     </div>
 
     <!-- Tabla de mínimos por producto -->
