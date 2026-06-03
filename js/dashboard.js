@@ -1876,48 +1876,43 @@ function renderReglasVenta(){
   reglasResults=results;
   reglasDesc=desc;
 
-  // ---- PEDIDO MÍNIMO EN $ (para vendedores) ----
-  // En vez de asumir el flete de 1 sola caja (que daba un mínimo irreal),
-  // tomamos un valor por caja representativo (mediana real de los pedidos de la
-  // zona) y buscamos cuántas cajas hacen falta para que el flete real caiga por
-  // debajo del 8%. El % logístico ≈ tarifa_por_caja / valor_por_caja, así que el
-  // mínimo lo marca el salto a un bracket de tarifa más barato (más volumen).
+  // ---- PEDIDO MÍNIMO EN $ (para vendedores), basado en pedidos REALES ----
+  // El campo "cajas" viene sucio (muchos pedidos figuran con 1 caja), así que no
+  // sirve para estimar valor por caja. Usamos el historial real de la zona: a
+  // mayor valor de pedido, menor % logístico. Un descuento d sobre la venta
+  // multiplica el % por 1/(1-d) (el flete y el seguro no cambian; cae la venta).
+  // Buscamos el menor valor de pedido tal que la mediana del % de los pedidos de
+  // ese tamaño o mayores quede bajo el umbral.
   const factorDesc = (1 - desc/100);
-  function valorPorCajaRef(z){
-    const ok=r=>r.val_decl>0&&r.cajas>0;
-    let base=allRows.filter(r=>r.region===z&&ok(r));
-    const zonal=base.length>=5;
-    if(!zonal) base=allRows.filter(ok);
-    if(!base.length) return null;
-    const vals=base.map(r=>r.val_decl/r.cajas).sort((a,b)=>a-b);
-    return {valor:vals[Math.floor(vals.length/2)], zonal}; // mediana (robusta a outliers)
-  }
-  const ref=valorPorCajaRef(zona);
-  // Escaneo único 1..30 cajas: registra el mínimo para <8% (verde), para <15%
-  // (amarillo) y el mejor caso alcanzable (piso de %). Así, aunque con descuento
-  // no llegue al 8%, siempre mostramos un monto mínimo en vez de "zona difícil".
-  function escaneoPedido(){
-    if(!ref||!ref.valor) return null;
+  function escaneoPedidoReal(){
+    const ped=allRows.filter(r=>r.region===zona&&r.val_decl>0&&r.pct_log!=null)
+                     .map(r=>({v:+r.val_decl, p:r.pct_log/factorDesc}))
+                     .sort((a,b)=>a.v-b.v);
+    if(ped.length<15) return null; // pocos pedidos en la zona para estimar
     const r1k=v=>Math.round(v/1000)*1000;
-    let verde=null, amarillo=null, mejor=null;
-    for(let n=1;n<=30;n++){
-      const flete=calcFlete(zona,n,0)||0;
-      if(flete<=0) continue;
-      const valorLista=ref.valor*n;
-      const valorFinal=valorLista*factorDesc;
-      const pct=valorFinal>0?(flete+valorLista*SEGURO)/valorFinal*100:999; // seguro sobre el valor de mercadería
-      const info={cajas:n, lista:r1k(valorLista), final:r1k(valorFinal), pct};
-      if(mejor==null||pct<mejor.pct-1e-9) mejor=info; // primer n del bracket más barato
-      if(pct<8&&!verde) verde=info;
-      if(pct<15&&!amarillo) amarillo=info;
-    }
-    return {verde, amarillo, mejor};
+    const half=Math.min(30, Math.floor(ped.length/4)); // ventana local ±half pedidos de valor parecido
+    // Mediana del % de los pedidos de valor SIMILAR (no acumulada, para no
+    // sesgar con los pedidos grandes que sí son verdes).
+    const medLocal=i=>{
+      const lo=Math.max(0,i-half), hi=Math.min(ped.length-1,i+half);
+      const w=ped.slice(lo,hi+1).map(x=>x.p).sort((a,b)=>a-b);
+      return w[Math.floor(w.length/2)];
+    };
+    // El % baja con el valor del pedido: el primer pedido (de menor valor) cuya
+    // mediana local cae bajo el umbral marca el mínimo.
+    const minPara=umbral=>{
+      for(let i=0;i<ped.length;i++) if(medLocal(i)<umbral){ const v=ped[i].v; return {lista:r1k(v), final:r1k(v*factorDesc)}; }
+      return null;
+    };
+    let mejorPct=Infinity;
+    for(let i=0;i<ped.length;i++){ const m=medLocal(i); if(m<mejorPct) mejorPct=m; }
+    return {verde:minPara(8), amarillo:minPara(15), mejor:{pct:mejorPct}};
   }
-  const esc=escaneoPedido();
-  const verde=esc?esc.verde:null;          // rentable (<8%)
-  const amarillo=(esc&&!verde)?esc.amarillo:null; // si no llega a verde, mínimo para no entrar en rojo
-  const mejor=(esc&&!verde&&!amarillo)?esc.mejor:null; // si tampoco, el mejor caso posible
-  const valorCajaR = ref?Math.round(ref.valor/1000)*1000:null;
+  const esc=escaneoPedidoReal();
+  const sinDatos=!esc;                                  // zona sin historial suficiente
+  const verde=esc?esc.verde:null;                       // rentable (<8%)
+  const amarillo=(esc&&!verde)?esc.amarillo:null;       // si no, mínimo para no entrar en rojo (<15%)
+  const mejor=(esc&&!verde&&!amarillo)?esc.mejor:null;  // si tampoco, el mejor caso posible
 
   cont.innerHTML=`
     <!-- Header con contexto -->
@@ -1926,26 +1921,28 @@ function renderReglasVenta(){
         <div style="font-size:12px;color:var(--text2);margin-bottom:2px">Zona seleccionada</div>
         <div style="font-size:18px;font-weight:700;color:var(--text)">${zona}</div>
       </div>
-      ${!ref ? '' : verde ? `<div style="flex:1;min-width:240px;padding:14px 18px;background:rgba(37,99,235,0.06);border:1px solid rgba(37,99,235,0.18);border-radius:var(--radius-lg)">
+      ${sinDatos ? `<div style="flex:1;min-width:240px;padding:14px 18px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-lg)">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">📦 Pedido mínimo</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.5">Hay pocos pedidos históricos en esta zona para estimar un mínimo confiable. Guiate por la tabla de productos de abajo.</div>
+      </div>` : verde ? `<div style="flex:1;min-width:240px;padding:14px 18px;background:rgba(37,99,235,0.06);border:1px solid rgba(37,99,235,0.18);border-radius:var(--radius-lg)">
         <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">📦 Pedido mínimo para que sea rentable</div>
         <div style="font-size:26px;font-weight:800;color:var(--blue);margin-bottom:6px">$${verde.lista.toLocaleString('es-AR')} <span style="font-size:14px;font-weight:400;color:var(--text2)">a precio de lista</span></div>
         <div style="font-size:13px;color:var(--text2);line-height:1.5">
-          Un pedido a esta zona conviene que sea de al menos <strong>$${verde.lista.toLocaleString('es-AR')}</strong> (≈ ${verde.cajas} caja${verde.cajas>1?'s':''}) para que el flete quede por debajo del 8%.${desc>0?`<br><span style="color:var(--text3);font-size:12px">Con ${desc}% de descuento eso equivale a $${verde.final.toLocaleString('es-AR')} facturados.</span>`:''}
-          <br><span style="color:var(--text3);font-size:11px">Calculado con el valor típico de tus pedidos ${ref.zonal?'en esta zona':'(promedio general)'}: ~$${valorCajaR.toLocaleString('es-AR')} por caja.</span>
+          Según el historial de la zona, los pedidos de <strong>$${verde.lista.toLocaleString('es-AR')}</strong> o más suelen quedar por debajo del 8% logístico.${desc>0?`<br><span style="color:var(--text3);font-size:12px">Con ${desc}% de descuento eso equivale a $${verde.final.toLocaleString('es-AR')} de venta.</span>`:''}
         </div>
       </div>` : amarillo ? `<div style="flex:1;min-width:240px;padding:14px 18px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.22);border-radius:var(--radius-lg)">
         <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">📦 Pedido mínimo para no entrar en rojo</div>
         <div style="font-size:26px;font-weight:800;color:#b45309;margin-bottom:6px">$${amarillo.lista.toLocaleString('es-AR')} <span style="font-size:14px;font-weight:400;color:var(--text2)">a precio de lista</span></div>
         <div style="font-size:13px;color:var(--text2);line-height:1.5">
-          Con el valor típico de tus pedidos (~$${valorCajaR.toLocaleString('es-AR')}/caja) esta zona <strong>no llega al 8%</strong> ni con volumen. El mínimo para mantenerlo bajo 15% (no rojo) es <strong>$${amarillo.lista.toLocaleString('es-AR')}</strong> (≈ ${amarillo.cajas} caja${amarillo.cajas>1?'s':''}).${desc>0?`<br><span style="color:var(--text3);font-size:12px">Con ${desc}% de descuento: $${amarillo.final.toLocaleString('es-AR')} facturados.</span>`:''}
-          <br><span style="color:var(--text3);font-size:11px">Para que sea verde hay que subir el valor por caja (productos más caros) o cobrar el flete aparte.</span>
+          ${desc>0?`Con ${desc}% de descuento, e`:'E'}sta zona difícilmente baja del 8%. Para mantenerlo bajo 15% (no rojo) el pedido tiene que ser de al menos <strong>$${amarillo.lista.toLocaleString('es-AR')}</strong>.${desc>0?`<br><span style="color:var(--text3);font-size:12px">Equivale a $${amarillo.final.toLocaleString('es-AR')} de venta.</span>`:''}
+          <br><span style="color:var(--text3);font-size:11px">Para que sea verde, bajá el descuento o sumá productos de mayor valor por caja.</span>
         </div>
       </div>` : mejor ? `<div style="flex:1;min-width:240px;padding:14px 18px;background:rgba(220,38,38,0.06);border:1px solid rgba(220,38,38,0.18);border-radius:var(--radius-lg)">
-        <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">📦 Mínimo posible (esta zona no llega a rentable)</div>
-        <div style="font-size:26px;font-weight:800;color:#b91c1c;margin-bottom:6px">$${mejor.lista.toLocaleString('es-AR')} <span style="font-size:14px;font-weight:400;color:var(--text2)">a precio de lista</span></div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">⚠️ Zona poco rentable</div>
+        <div style="font-size:26px;font-weight:800;color:#b91c1c;margin-bottom:6px">~${mejor.pct.toFixed(1)}% <span style="font-size:14px;font-weight:400;color:var(--text2)">en el mejor caso</span></div>
         <div style="font-size:13px;color:var(--text2);line-height:1.5">
-          Con el valor típico de tus pedidos (~$${valorCajaR.toLocaleString('es-AR')}/caja)${desc>0?` y ${desc}% de descuento`:''}, lo mejor que se consigue en esta zona es <strong>${mejor.pct.toFixed(1)}%</strong> logístico, con un pedido de <strong>$${mejor.lista.toLocaleString('es-AR')}</strong> (≈ ${mejor.cajas} caja${mejor.cajas>1?'s':''}).${desc>0?`<br><span style="color:var(--text3);font-size:12px">Equivale a $${mejor.final.toLocaleString('es-AR')} facturados.</span>`:''}
-          <br><span style="color:var(--text3);font-size:11px">Para bajar más hay que reducir el descuento, subir el valor por caja o cobrar el flete aparte.</span>
+          ${desc>0?`Con ${desc}% de descuento, l`:'L'}os pedidos de esta zona no bajan del 15% logístico ni siendo grandes; lo mejor ronda <strong>${mejor.pct.toFixed(1)}%</strong>.
+          <br><span style="color:var(--text3);font-size:11px">Conviene reducir el descuento, subir el valor por caja o cobrar el flete aparte.</span>
         </div>
       </div>` : ''}
     </div>
