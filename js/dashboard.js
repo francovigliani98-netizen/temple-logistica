@@ -1933,13 +1933,13 @@ function renderReglasVenta(){
         <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">📦 Pedido mínimo para que sea rentable</div>
         <div style="font-size:26px;font-weight:800;color:var(--blue);margin-bottom:6px">$${verde.lista.toLocaleString('es-AR')} <span style="font-size:14px;font-weight:400;color:var(--text2)">a precio de lista</span></div>
         <div style="font-size:13px;color:var(--text2);line-height:1.5">
-          Con el mix típico de productos, un pedido de <strong>$${verde.lista.toLocaleString('es-AR')}</strong> o más (a precio de venta) queda por debajo del 8% logístico en esta zona.${desc>0?`<br><span style="color:var(--text3);font-size:12px">Con ${desc}% de descuento eso equivale a $${verde.final.toLocaleString('es-AR')} cobrados.</span>`:''}
+          Con el mix típico de productos, un pedido de <strong>$${verde.lista.toLocaleString('es-AR')}</strong> a precio de lista (o más) queda por debajo del 8% logístico en esta zona.${desc>0?`<br><span style="color:var(--text3);font-size:12px">Con ${desc}% de descuento, eso es <strong>$${verde.final.toLocaleString('es-AR')}</strong> que paga el cliente.</span>`:''}
         </div>
       </div>` : amarillo ? `<div style="flex:1;min-width:240px;padding:14px 18px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.22);border-radius:var(--radius-lg)">
         <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">📦 Pedido mínimo para no entrar en rojo</div>
         <div style="font-size:26px;font-weight:800;color:#b45309;margin-bottom:6px">$${amarillo.lista.toLocaleString('es-AR')} <span style="font-size:14px;font-weight:400;color:var(--text2)">a precio de lista</span></div>
         <div style="font-size:13px;color:var(--text2);line-height:1.5">
-          ${desc>0?`Con ${desc}% de descuento, e`:'E'}sta zona difícilmente baja del 8%. Para mantenerlo bajo 15% (no rojo) el pedido tiene que ser de al menos <strong>$${amarillo.lista.toLocaleString('es-AR')}</strong>.${desc>0?`<br><span style="color:var(--text3);font-size:12px">Equivale a $${amarillo.final.toLocaleString('es-AR')} de venta.</span>`:''}
+          ${desc>0?`Con ${desc}% de descuento, e`:'E'}sta zona difícilmente baja del 8%. Para mantenerlo bajo 15% (no rojo) el pedido tiene que ser de al menos <strong>$${amarillo.lista.toLocaleString('es-AR')}</strong> a precio de lista.${desc>0?`<br><span style="color:var(--text3);font-size:12px">Con ${desc}% de descuento, eso es <strong>$${amarillo.final.toLocaleString('es-AR')}</strong> que paga el cliente.</span>`:''}
           <br><span style="color:var(--text3);font-size:11px">Para que sea verde, bajá el descuento o sumá productos de mayor valor por caja.</span>
         </div>
       </div>` : mejor ? `<div style="flex:1;min-width:240px;padding:14px 18px;background:rgba(220,38,38,0.06);border:1px solid rgba(220,38,38,0.18);border-radius:var(--radius-lg)">
