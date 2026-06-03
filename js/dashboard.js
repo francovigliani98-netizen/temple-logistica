@@ -1101,7 +1101,7 @@ function renderChartsClientes(){
     <div class="rank-row"><div class="rank-num">${i+1}</div><div class="rank-name" title="${name}">${name}</div>
     <div class="rank-bar-wrap"><div class="rank-bar" style="width:${Math.round(d.gasto/maxG*100)}%"></div></div>
     <div class="rank-val">${peso(d.gasto)}</div>
-    <button onclick="verSimulacionCliente(${JSON.stringify(name)})" title="Ver cuánto se ahorraría consolidando pedidos" style="flex-shrink:0;font-size:10px;padding:2px 8px;border:1px solid var(--border2);border-radius:12px;background:var(--surface2);color:var(--text2);cursor:pointer;white-space:nowrap;margin-left:6px">Ver ahorro →</button>
+    <button data-cname="${name.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" onclick="verSimulacionCliente(this.dataset.cname)" title="Ver cuánto se ahorraría consolidando pedidos" style="flex-shrink:0;font-size:10px;padding:2px 8px;border:1px solid var(--border2);border-radius:12px;background:var(--surface2);color:var(--text2);cursor:pointer;white-space:nowrap;margin-left:6px">Ver ahorro →</button>
     </div>`).join('');
   const topPct=Object.entries(clientMap).filter(([,d])=>d.pctLogs.length>=2).map(([name,d])=>[name,d.pctLogs.reduce((s,v)=>s+v,0)/d.pctLogs.length]).sort((a,b)=>b[1]-a[1]).slice(0,10);
   const maxP=topPct[0]?.[1]||1;
