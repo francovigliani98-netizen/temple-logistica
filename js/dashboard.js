@@ -221,6 +221,20 @@ function eliminarFilaSim(id){
   else{ renderSimRows(); calcSim(); }
 }
 
+// Mapea el texto del autocompletado a un producto del catálogo (por descripción).
+function seleccionarProductoSim(id,valor){
+  const v=String(valor||'').trim().toLowerCase();
+  let prod=null;
+  if(v){
+    prod=listaPrecios.find(p=>String(p.descripcion||'').trim().toLowerCase()===v);
+    if(!prod){ // si el texto identifica un único producto, lo tomamos igual
+      const m=listaPrecios.filter(p=>String(p.descripcion||'').toLowerCase().includes(v));
+      if(m.length===1) prod=m[0];
+    }
+  }
+  actualizarFilaSim(id,'productoId',prod?String(prod.id):'');
+}
+
 function actualizarFilaSim(id,campo,valor){
   const fila=simRows.find(r=>r.id===id);
   if(!fila) return;
@@ -234,10 +248,11 @@ function actualizarFilaSim(id,campo,valor){
 function renderSimRows(){
   const tbody=document.getElementById('sim-rows-tbody');
   if(!tbody) return;
-  const opciones=listaPrecios.length===0
-    ?'<option value="">Sin productos — cargar desde admin</option>'
-    :'<option value="">Seleccionar producto...</option>'+
-      listaPrecios.map(p=>`<option value="${p.id}">${p.descripcion}</option>`).join('');
+  // Autocompletado: poblamos el datalist compartido con los productos del catálogo.
+  const escAttr=s=>String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+  const dl=document.getElementById('sim-prod-datalist');
+  if(dl) dl.innerHTML=listaPrecios.map(p=>`<option value="${escAttr(p.descripcion)}"></option>`).join('');
+  const sinProd=listaPrecios.length===0;
 
   tbody.innerHTML=simRows.map(r=>{
     const prod=listaPrecios.find(p=>String(p.id)===String(r.productoId));
@@ -245,13 +260,11 @@ function renderSimRows(){
     const subtotalLista=precioU*r.unidades;
     const subtotalFinal=subtotalLista*(1-r.descuento/100);
     const ahorro=subtotalLista-subtotalFinal;
-    const selOpts=opciones.replace(`value="${r.productoId}"`,`value="${r.productoId}" selected`);
     return `<tr style="border-bottom:1px solid var(--border)">
       <td style="padding:8px 6px">
-        <select onchange="actualizarFilaSim(${r.id},'productoId',this.value)"
-          style="width:100%;padding:7px 8px;border:1px solid var(--border2);border-radius:var(--radius);font-size:12px;background:var(--surface);outline:none">
-          ${selOpts}
-        </select>
+        <input list="sim-prod-datalist" value="${prod?escAttr(prod.descripcion):''}" placeholder="${sinProd?'Sin productos — cargar desde admin':'Escribí el producto…'}" ${sinProd?'disabled':''}
+          onchange="seleccionarProductoSim(${r.id},this.value)"
+          style="width:100%;padding:7px 8px;border:1px solid var(--border2);border-radius:var(--radius);font-size:12px;background:var(--surface);color:var(--text);outline:none;box-sizing:border-box">
         ${prod?`<div style="font-size:10px;color:var(--text3);margin-top:2px">$${Math.round(precioU).toLocaleString('es-AR')}/u · ${prod.unidades_por_bulto} u/bulto</div>`:''}
       </td>
       <td style="padding:8px 6px;text-align:center">
