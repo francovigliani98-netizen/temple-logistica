@@ -999,7 +999,6 @@ function renderComparador(){
   const p=n=>'$'+Math.round(n).toLocaleString('es-AR');
   const pct=n=>n.toFixed(1)+'%';
   const num=n=>Math.round(n).toString();
-  const dias=n=>n.toFixed(1)+' d';
 
   document.getElementById('cmp-header-a').textContent=mesA;
   document.getElementById('cmp-header-b').textContent=mesB;
@@ -1013,31 +1012,25 @@ function renderComparador(){
     cmpRow('% logístico prom.',  mA.avgPct,        mB.avgPct,        pct, false),
     cmpRow('OTIF',               mA.otif,          mB.otif,          pct, true),
     cmpRow('Pedidos rojos',      mA.rojos,         mB.rojos,         num, false),
-    cmpRow('Incidencias',        mA.inc,           mB.inc,           num, false),
-    cmpRow('Días prom. Klozer',  mA.diasKlozer,    mB.diasKlozer,    dias,false),
-    cmpRow('Días prom. prep.',   mA.diasPrep,      mB.diasPrep,      dias,false),
-    cmpRow('% CABA del total',   mA.pctCABA,       mB.pctCABA,       pct, false),
   ].join('');
 
   // Gráfico de barras horizontales dobles (reemplaza radar)
-  const barLabels=['Gasto total','Cajas prom./pedido','% logístico','OTIF (%)','Pedidos rojos','Días Klozer'];
+  const barLabels=['Gasto total','Cajas prom./pedido','% logístico','OTIF (%)','Pedidos rojos'];
   const barDataA=[
     Math.round(mA.total/1000),
     Math.round(mA.totalCajas/(mA.count||1)*10)/10,
     Math.round(mA.avgPct*10)/10,
     Math.round(mA.otif*10)/10,
-    mA.rojos,
-    Math.round(mA.diasKlozer*100)/100
+    mA.rojos
   ];
   const barDataB=[
     Math.round(mB.total/1000),
     Math.round(mB.totalCajas/(mB.count||1)*10)/10,
     Math.round(mB.avgPct*10)/10,
     Math.round(mB.otif*10)/10,
-    mB.rojos,
-    Math.round(mB.diasKlozer*100)/100
+    mB.rojos
   ];
-  const barSuffixes=['k','cj','%','%','','d'];
+  const barSuffixes=['k','cj','%','%',''];
   mkChart('c-radar-cmp',{
     type:'bar',
     data:{
