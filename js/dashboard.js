@@ -167,9 +167,24 @@ let mixData = []; // [{pid, mes, producto, cantidad}]
 
 async function loadProductosMix(){
   try{
-    const{data,error}=await supabaseClient.from('pedido_productos').select('pid,mes,producto,cantidad');
-    if(error||!data){mixData=[];return;}
-    mixData=data;
+    // Supabase corta las respuestas en 1000 filas. Como hay más filas de
+    // productos que eso, paginamos con .range() para traerlas todas; si no,
+    // los pedidos más recientes quedaban sin detalle de composición.
+    const PAGE=1000;
+    let todos=[],desde=0;
+    for(;;){
+      const{data,error}=await supabaseClient
+        .from('pedido_productos')
+        .select('pid,mes,producto,cantidad')
+        .order('pid',{ascending:true})
+        .range(desde,desde+PAGE-1);
+      if(error){ if(!todos.length){mixData=[];return;} break; }
+      if(!data||!data.length) break;
+      todos=todos.concat(data);
+      if(data.length<PAGE) break;
+      desde+=PAGE;
+    }
+    mixData=todos;
   }catch(e){ mixData=[]; }
 }
 
