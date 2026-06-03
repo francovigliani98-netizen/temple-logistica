@@ -1840,7 +1840,7 @@ function renderReglasVenta(){
       const valorLista=precioU*u;
       const valorFinal=valorLista*(1-desc/100);
       const flete=calcFlete(zona,Math.ceil(cajas),cajas>=31?Math.ceil(cajas/31):0)||0;
-      const totalLog=flete+valorFinal*0.012;
+      const totalLog=flete+valorLista*0.012; // seguro 1,2% sobre el valor de mercadería (no el descontado)
       const pct=valorFinal>0?totalLog/valorFinal*100:999;
       if(pct<8){minUnidades=u;pctFinal=pct;break;}
     }
@@ -1882,8 +1882,10 @@ function renderReglasVenta(){
     for(let n=1;n<=30;n++){
       const flete=calcFlete(zona,n,0)||0;
       if(flete<=0) continue;
-      const valorFinal=ref.valor*n*factorDesc;
-      const pct=valorFinal>0?(flete+valorFinal*0.012)/valorFinal*100:999;
+      const valorLista=ref.valor*n;
+      const valorFinal=valorLista*factorDesc;
+      const seguro=valorLista*0.012; // 1,2% sobre el valor de mercadería (no el descontado)
+      const pct=valorFinal>0?(flete+seguro)/valorFinal*100:999;
       if(pct<umbral){
         const lista=ref.valor*n, r1k=v=>Math.round(v/1000)*1000;
         return {cajas:n, lista:r1k(lista), final:r1k(lista*factorDesc), pct};
