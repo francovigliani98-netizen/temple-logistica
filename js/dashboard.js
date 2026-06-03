@@ -1876,40 +1876,45 @@ function renderReglasVenta(){
   reglasResults=results;
   reglasDesc=desc;
 
-  // ---- PEDIDO MÍNIMO EN $ (para vendedores), basado en pedidos REALES ----
-  // El campo "cajas" viene sucio (muchos pedidos figuran con 1 caja), así que no
-  // sirve para estimar valor por caja. Usamos el historial real de la zona: a
-  // mayor valor de pedido, menor % logístico. Un descuento d sobre la venta
-  // multiplica el % por 1/(1-d) (el flete y el seguro no cambian; cae la venta).
-  // Buscamos el menor valor de pedido tal que la mediana del % de los pedidos de
-  // ese tamaño o mayores quede bajo el umbral.
+  // ---- PEDIDO MÍNIMO EN $ (a precio de lista), EXACTO ----
+  // Consistente con la tabla de productos: catálogo (lista de precios) + tarifario
+  // + seguro. El % se mide sobre el precio de VENTA (lista). El valor por caja es
+  // el promedio ponderado por ventas reales (mix real del negocio).
   const factorDesc = (1 - desc/100);
-  function escaneoPedidoReal(){
-    const ped=allRows.filter(r=>r.region===zona&&r.val_decl>0&&r.pct_log!=null)
-                     .map(r=>({v:+r.val_decl, p:r.pct_log/factorDesc}))
-                     .sort((a,b)=>a.v-b.v);
-    if(ped.length<15) return null; // pocos pedidos en la zona para estimar
-    const r1k=v=>Math.round(v/1000)*1000;
-    const half=Math.min(30, Math.floor(ped.length/4)); // ventana local ±half pedidos de valor parecido
-    // Mediana del % de los pedidos de valor SIMILAR (no acumulada, para no
-    // sesgar con los pedidos grandes que sí son verdes).
-    const medLocal=i=>{
-      const lo=Math.max(0,i-half), hi=Math.min(ped.length-1,i+half);
-      const w=ped.slice(lo,hi+1).map(x=>x.p).sort((a,b)=>a-b);
-      return w[Math.floor(w.length/2)];
-    };
-    // El % baja con el valor del pedido: el primer pedido (de menor valor) cuya
-    // mediana local cae bajo el umbral marca el mínimo.
-    const minPara=umbral=>{
-      for(let i=0;i<ped.length;i++) if(medLocal(i)<umbral){ const v=ped[i].v; return {lista:r1k(v), final:r1k(v*factorDesc)}; }
-      return null;
-    };
-    let mejorPct=Infinity;
-    for(let i=0;i<ped.length;i++){ const m=medLocal(i); if(m<mejorPct) mejorPct=m; }
-    return {verde:minPara(8), amarillo:minPara(15), mejor:{pct:mejorPct}};
+  function valorCajaTipico(){
+    // Los 4-5 productos principales vienen con nombre simplificado en el mix;
+    // los mapeamos a su descripción del catálogo para tomar el precio de ahí.
+    const alias={'Gin 500ml':'GIN BOSQUE NATIVO BOTELLA 500 ML','Gin 750ml':'GIN BOSQUE NATIVO BOTELLA 750 ML','Vermú 750ml':'FERIADO ROJO VERMÚ 750 ML','Cerveza':'CERVEZA TEMPLE INDIE GOLDEN 473 ML','Alta Montaña 750ml':'GIN BOSQUE ALTA MONTAÑA BOTELLA 750 ML'};
+    let valor=0, cajas=0;
+    for(const m of (mixData||[])){
+      const lp=listaPrecios.find(p=>p.descripcion===(alias[m.producto]||m.producto));
+      if(!lp) continue;
+      const precio=parseFloat(lp.precio_unidad), upb=parseFloat(lp.unidades_por_bulto);
+      if(!precio||!upb) continue;
+      const cant=parseFloat(m.cantidad)||0;
+      valor+=cant*precio; cajas+=cant/upb;
+    }
+    return cajas>0 ? valor/cajas : null;
   }
-  const esc=escaneoPedidoReal();
-  const sinDatos=!esc;                                  // zona sin historial suficiente
+  const Vcaja=valorCajaTipico(); // valor por caja típico a precio de lista
+  function escaneoPedidoExacto(){
+    if(!Vcaja) return null;
+    const r1k=v=>Math.round(v/1000)*1000;
+    let verde=null, amarillo=null, mejor=null;
+    for(let n=1;n<=30;n++){
+      const flete=calcFlete(zona,n,0)||0;
+      if(flete<=0) continue;
+      const valorLista=Vcaja*n, valorFinal=valorLista*factorDesc;
+      const pct=valorFinal>0?(flete+valorLista*SEGURO)/valorFinal*100:999; // % sobre precio de venta
+      const info={lista:r1k(valorLista), final:r1k(valorFinal), pct};
+      if(mejor==null||pct<mejor.pct-1e-9) mejor=info;
+      if(pct<8&&!verde) verde=info;
+      if(pct<15&&!amarillo) amarillo=info;
+    }
+    return {verde, amarillo, mejor};
+  }
+  const esc=escaneoPedidoExacto();
+  const sinDatos=!esc;                                  // sin catálogo/mix para estimar
   const verde=esc?esc.verde:null;                       // rentable (<8%)
   const amarillo=(esc&&!verde)?esc.amarillo:null;       // si no, mínimo para no entrar en rojo (<15%)
   const mejor=(esc&&!verde&&!amarillo)?esc.mejor:null;  // si tampoco, el mejor caso posible
@@ -1923,12 +1928,12 @@ function renderReglasVenta(){
       </div>
       ${sinDatos ? `<div style="flex:1;min-width:240px;padding:14px 18px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-lg)">
         <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">📦 Pedido mínimo</div>
-        <div style="font-size:13px;color:var(--text2);line-height:1.5">Hay pocos pedidos históricos en esta zona para estimar un mínimo confiable. Guiate por la tabla de productos de abajo.</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.5">Falta la lista de precios o el detalle de productos para calcular el mínimo. Cargalos desde el admin.</div>
       </div>` : verde ? `<div style="flex:1;min-width:240px;padding:14px 18px;background:rgba(37,99,235,0.06);border:1px solid rgba(37,99,235,0.18);border-radius:var(--radius-lg)">
         <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">📦 Pedido mínimo para que sea rentable</div>
         <div style="font-size:26px;font-weight:800;color:var(--blue);margin-bottom:6px">$${verde.lista.toLocaleString('es-AR')} <span style="font-size:14px;font-weight:400;color:var(--text2)">a precio de lista</span></div>
         <div style="font-size:13px;color:var(--text2);line-height:1.5">
-          Según el historial de la zona, los pedidos de <strong>$${verde.lista.toLocaleString('es-AR')}</strong> o más suelen quedar por debajo del 8% logístico.${desc>0?`<br><span style="color:var(--text3);font-size:12px">Con ${desc}% de descuento eso equivale a $${verde.final.toLocaleString('es-AR')} de venta.</span>`:''}
+          Con el mix típico de productos, un pedido de <strong>$${verde.lista.toLocaleString('es-AR')}</strong> o más (a precio de venta) queda por debajo del 8% logístico en esta zona.${desc>0?`<br><span style="color:var(--text3);font-size:12px">Con ${desc}% de descuento eso equivale a $${verde.final.toLocaleString('es-AR')} cobrados.</span>`:''}
         </div>
       </div>` : amarillo ? `<div style="flex:1;min-width:240px;padding:14px 18px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.22);border-radius:var(--radius-lg)">
         <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">📦 Pedido mínimo para no entrar en rojo</div>
