@@ -1936,6 +1936,7 @@ function renderReglasVenta(){
           ${desc>0
             ? `Con ${desc}% de descuento, el cliente tiene que pagar al menos <strong>$${verde.final.toLocaleString('es-AR')}</strong> para que el índice logístico quede por debajo del 8%.<br><span style="color:var(--text3);font-size:12px">Eso es <strong>$${verde.lista.toLocaleString('es-AR')}</strong> a precio de lista (lo que armás del catálogo).</span>`
             : `El pedido tiene que ser de al menos <strong>$${verde.final.toLocaleString('es-AR')}</strong> para que el índice logístico quede por debajo del 8%.`}
+          <span style="color:var(--text3);font-size:11px;display:block;margin-top:5px">Asume un pedido con tu mix habitual de productos.</span>
         </div>
       </div>` : amarillo ? `<div style="flex:1;min-width:240px;padding:14px 18px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.22);border-radius:var(--radius-lg)">
         <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">📦 Pedido mínimo para no entrar en rojo (&lt;15%)</div>
