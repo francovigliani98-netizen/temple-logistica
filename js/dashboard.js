@@ -1169,9 +1169,6 @@ function renderChartsClientes(){
 
   const targetInterval = frecTargetInterval || 10;
 
-  // Actualizar header de la columna de simulación
-  const thSim = document.getElementById('frec-th-sim');
-  if (thSim) thSim.innerHTML = `Cada ${targetInterval} días<br><span style="font-weight:400;font-size:10px" id="frec-th-sim-sub">cajas estimadas · % esperado</span>`;
 
   const simClientes = Object.entries(clienteFrecMap)
     .filter(([, d]) => d.pedidos >= 2 && d.totalValDecl > 0 && d.totalCajas > 0 && d.region)
