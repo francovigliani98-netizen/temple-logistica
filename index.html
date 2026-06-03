@@ -327,13 +327,34 @@ th[data-sort]:hover{background:var(--border2)}
           <span style="font-size:14px;color:var(--text2)">%</span>
         </div>
       </div>
-      <div>
-        <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">BUSCAR PRODUCTO</label>
-        <input type="text" id="reglas-search" placeholder="Ej: gin nativo, código..." oninput="renderReglasVenta()" style="width:220px;padding:8px 12px;border:1px solid var(--border2);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text);outline:none">
-      </div>
       <div style="font-size:12px;color:var(--text3);margin-top:16px">Meta: &lt;8% logístico s/ valor mercadería</div>
     </div>
     <div id="reglas-cont"><div style="text-align:center;padding:60px;color:var(--text3);font-size:14px">Seleccioná una zona para ver los mínimos</div></div>
+    <div id="reglas-tabla" class="table-card" style="display:none;margin-top:20px">
+      <div class="table-header">
+        <h3>Mínimos por producto para ser rentable (&lt;8% logístico)</h3>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <span id="reglas-count" style="font-size:12px;color:var(--text3)"></span>
+          <input type="text" id="reglas-search" placeholder="Buscar producto o código..." oninput="renderReglasTabla()" style="width:220px;padding:7px 12px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text);outline:none">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="num-right">Código</th>
+              <th>Producto</th>
+              <th class="num-right">Precio unit.</th>
+              <th class="num-right">Unidades mínimas</th>
+              <th class="num-right">Cajas</th>
+              <th class="num-right">Valor mínimo</th>
+              <th class="num-right">% logístico</th>
+            </tr>
+          </thead>
+          <tbody id="reglas-tbody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <!-- COMPARADOR -->

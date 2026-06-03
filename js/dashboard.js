@@ -1816,14 +1816,19 @@ function switchPage(id,el){
 }
 
 // ---- REGLAS DE VENTA ----
+let reglasResults=[], reglasDesc=0; // compartido entre el cálculo y la tabla (buscador)
+
 function renderReglasVenta(){
   const zonaSelect=document.getElementById('reglas-zona');
   const desc=parseInt(document.getElementById('reglas-desc')?.value)||0;
   const zona=zonaSelect?.value||'';
   const cont=document.getElementById('reglas-cont');
+  const tabla=document.getElementById('reglas-tabla');
   if(!cont) return;
   if(!zona){
     cont.innerHTML=`<div style="text-align:center;padding:40px;color:var(--text3);font-size:14px">Seleccioná una zona para ver los mínimos</div>`;
+    if(tabla) tabla.style.display='none';
+    reglasResults=[];
     return;
   }
 
@@ -1857,12 +1862,9 @@ function renderReglasVenta(){
     });
   }
 
-  // Buscador + orden por código (SKU) de menor a mayor
-  const srch=(document.getElementById('reglas-search')?.value||'').trim().toLowerCase();
-  const matchSearch=r=>!srch||String(r.descripcion||'').toLowerCase().includes(srch)||String(r.sku||'').toLowerCase().includes(srch);
-  const skuNum=v=>{const n=parseFloat(String(v).replace(/[^0-9.]/g,''));return isNaN(n)?Infinity:n;};
-  const visibles=results.filter(matchSearch).sort((a,b)=>skuNum(a.sku)-skuNum(b.sku));
-  const rentables=visibles.filter(r=>r.minUnidades);
+  // Guardar para la tabla (que tiene su propio buscador, ver renderReglasTabla)
+  reglasResults=results;
+  reglasDesc=desc;
 
   // ---- PEDIDO MÍNIMO EN $ (para vendedores) ----
   // En vez de asumir el flete de 1 sola caja (que daba un mínimo irreal),
@@ -1928,53 +1930,47 @@ function renderReglasVenta(){
         <div style="font-size:13px;color:var(--text2);line-height:1.5">Con el valor típico de tus pedidos (~$${valorCajaR.toLocaleString('es-AR')}/caja), el flete a esta zona no baja del 15% ni sumando volumen${desc>0?` con ${desc}% de descuento`:''}. Para que convenga hay que subir bastante el valor por caja o cobrar el flete aparte.</div>
       </div>`}
     </div>
-
-    <!-- Tabla de mínimos por producto -->
-    <div class="table-card">
-      <div class="table-header">
-        <h3>Mínimos por producto para ser rentable (&lt;8% logístico)</h3>
-        <div style="font-size:12px;color:var(--text3)">${srch?`${visibles.length} resultado${visibles.length===1?'':'s'} · `:''}${rentables.length} de ${visibles.length} alcanzan el mínimo</div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th class="num-right">Código</th>
-              <th>Producto</th>
-              <th class="num-right">Precio unit.</th>
-              <th class="num-right">Unidades mínimas</th>
-              <th class="num-right">Cajas</th>
-              <th class="num-right">Valor mínimo</th>
-              <th class="num-right">% logístico</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${visibles.length===0?`
-              <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">${srch?'Ningún producto coincide con la búsqueda.':'Sin productos cargados. Subí la lista de precios desde el admin.'}</td></tr>
-            `:visibles.map(r=>r.minUnidades?`
-              <tr>
-                <td class="num-right" style="font-size:12px;color:var(--text3)">${r.sku||'-'}</td>
-                <td style="font-size:13px">${r.descripcion}</td>
-                <td class="num-right" style="font-size:12px">$${Math.round(r.precioU).toLocaleString('es-AR')}</td>
-                <td class="num-right"><strong>${r.minUnidades}</strong> <span style="font-size:11px;color:var(--text3)">u</span></td>
-                <td class="num-right">${r.cajas} cj</td>
-                <td class="num-right" style="font-weight:600">$${Math.round(r.minUnidades*r.precioU*(1-desc/100)).toLocaleString('es-AR')}</td>
-                <td class="num-right"><span class="badge green">${r.pctFinal.toFixed(1)}%</span></td>
-              </tr>
-            `:`
-              <tr style="opacity:.65">
-                <td class="num-right" style="font-size:12px;color:var(--text3)">${r.sku||'-'}</td>
-                <td style="font-size:13px">${r.descripcion}</td>
-                <td class="num-right" style="font-size:12px">$${Math.round(r.precioU).toLocaleString('es-AR')}</td>
-                <td class="num-right" colspan="3" style="font-size:12px;color:var(--text3)">No baja del 8% ni con 60 unidades</td>
-                <td class="num-right"><span class="badge gray">&gt;8%</span></td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
   `;
+
+  // Mostrar la tabla y dibujar sus filas. El buscador y el encabezado son HTML
+  // estático, así no se pierde el foco al tipear; solo se redibuja el tbody.
+  if(tabla) tabla.style.display='';
+  renderReglasTabla();
+}
+
+// Dibuja las filas de la tabla de mínimos según el buscador (orden por código asc).
+function renderReglasTabla(){
+  const tbody=document.getElementById('reglas-tbody');
+  const countEl=document.getElementById('reglas-count');
+  if(!tbody) return;
+  const desc=reglasDesc;
+  const srch=(document.getElementById('reglas-search')?.value||'').trim().toLowerCase();
+  const matchSearch=r=>!srch||String(r.descripcion||'').toLowerCase().includes(srch)||String(r.sku||'').toLowerCase().includes(srch);
+  const skuNum=v=>{const n=parseFloat(String(v).replace(/[^0-9.]/g,''));return isNaN(n)?Infinity:n;};
+  const visibles=reglasResults.filter(matchSearch).sort((a,b)=>skuNum(a.sku)-skuNum(b.sku));
+  const rentables=visibles.filter(r=>r.minUnidades);
+  if(countEl) countEl.textContent=`${srch?`${visibles.length} resultado${visibles.length===1?'':'s'} · `:''}${rentables.length} de ${visibles.length} alcanzan el mínimo`;
+  tbody.innerHTML=visibles.length===0?`
+      <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">${srch?'Ningún producto coincide con la búsqueda.':'Sin productos cargados. Subí la lista de precios desde el admin.'}</td></tr>
+    `:visibles.map(r=>r.minUnidades?`
+      <tr>
+        <td class="num-right" style="font-size:12px;color:var(--text3)">${r.sku||'-'}</td>
+        <td style="font-size:13px">${r.descripcion}</td>
+        <td class="num-right" style="font-size:12px">$${Math.round(r.precioU).toLocaleString('es-AR')}</td>
+        <td class="num-right"><strong>${r.minUnidades}</strong> <span style="font-size:11px;color:var(--text3)">u</span></td>
+        <td class="num-right">${r.cajas} cj</td>
+        <td class="num-right" style="font-weight:600">$${Math.round(r.minUnidades*r.precioU*(1-desc/100)).toLocaleString('es-AR')}</td>
+        <td class="num-right"><span class="badge green">${r.pctFinal.toFixed(1)}%</span></td>
+      </tr>
+    `:`
+      <tr style="opacity:.65">
+        <td class="num-right" style="font-size:12px;color:var(--text3)">${r.sku||'-'}</td>
+        <td style="font-size:13px">${r.descripcion}</td>
+        <td class="num-right" style="font-size:12px">$${Math.round(r.precioU).toLocaleString('es-AR')}</td>
+        <td class="num-right" colspan="3" style="font-size:12px;color:var(--text3)">No baja del 8% ni con 60 unidades</td>
+        <td class="num-right"><span class="badge gray">&gt;8%</span></td>
+      </tr>
+    `).join('');
 }
 
 window.addEventListener('DOMContentLoaded',loadData);
