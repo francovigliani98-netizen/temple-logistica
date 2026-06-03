@@ -1857,9 +1857,12 @@ function renderReglasVenta(){
     });
   }
 
-  // Separar rentables de no rentables
-  const rentables=results.filter(r=>r.minUnidades).sort((a,b)=>a.minUnidades-b.minUnidades);
-  const noRentables=results.filter(r=>!r.minUnidades);
+  // Buscador + orden por código (SKU) de menor a mayor
+  const srch=(document.getElementById('reglas-search')?.value||'').trim().toLowerCase();
+  const matchSearch=r=>!srch||String(r.descripcion||'').toLowerCase().includes(srch)||String(r.sku||'').toLowerCase().includes(srch);
+  const skuNum=v=>{const n=parseFloat(String(v).replace(/[^0-9.]/g,''));return isNaN(n)?Infinity:n;};
+  const visibles=results.filter(matchSearch).sort((a,b)=>skuNum(a.sku)-skuNum(b.sku));
+  const rentables=visibles.filter(r=>r.minUnidades);
 
   // ---- PEDIDO MÍNIMO EN $ (para vendedores) ----
   // En vez de asumir el flete de 1 sola caja (que daba un mínimo irreal),
@@ -1930,12 +1933,13 @@ function renderReglasVenta(){
     <div class="table-card">
       <div class="table-header">
         <h3>Mínimos por producto para ser rentable (&lt;8% logístico)</h3>
-        <div style="font-size:12px;color:var(--text3)">${rentables.length} de ${results.length} productos alcanzan el mínimo</div>
+        <div style="font-size:12px;color:var(--text3)">${srch?`${visibles.length} resultado${visibles.length===1?'':'s'} · `:''}${rentables.length} de ${visibles.length} alcanzan el mínimo</div>
       </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
+              <th class="num-right">Código</th>
               <th>Producto</th>
               <th class="num-right">Precio unit.</th>
               <th class="num-right">Unidades mínimas</th>
@@ -1945,8 +1949,11 @@ function renderReglasVenta(){
             </tr>
           </thead>
           <tbody>
-            ${rentables.map(r=>`
+            ${visibles.length===0?`
+              <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">${srch?'Ningún producto coincide con la búsqueda.':'Sin productos cargados. Subí la lista de precios desde el admin.'}</td></tr>
+            `:visibles.map(r=>r.minUnidades?`
               <tr>
+                <td class="num-right" style="font-size:12px;color:var(--text3)">${r.sku||'-'}</td>
                 <td style="font-size:13px">${r.descripcion}</td>
                 <td class="num-right" style="font-size:12px">$${Math.round(r.precioU).toLocaleString('es-AR')}</td>
                 <td class="num-right"><strong>${r.minUnidades}</strong> <span style="font-size:11px;color:var(--text3)">u</span></td>
@@ -1954,11 +1961,15 @@ function renderReglasVenta(){
                 <td class="num-right" style="font-weight:600">$${Math.round(r.minUnidades*r.precioU*(1-desc/100)).toLocaleString('es-AR')}</td>
                 <td class="num-right"><span class="badge green">${r.pctFinal.toFixed(1)}%</span></td>
               </tr>
+            `:`
+              <tr style="opacity:.65">
+                <td class="num-right" style="font-size:12px;color:var(--text3)">${r.sku||'-'}</td>
+                <td style="font-size:13px">${r.descripcion}</td>
+                <td class="num-right" style="font-size:12px">$${Math.round(r.precioU).toLocaleString('es-AR')}</td>
+                <td class="num-right" colspan="3" style="font-size:12px;color:var(--text3)">No baja del 8% ni con 60 unidades</td>
+                <td class="num-right"><span class="badge gray">&gt;8%</span></td>
+              </tr>
             `).join('')}
-            ${noRentables.length>0?`
-              <tr><td colspan="6" style="padding:10px 12px;font-size:12px;color:var(--text3);background:var(--surface2)">
-                ${noRentables.length} producto${noRentables.length>1?'s':''} no alcanzan el 8% ni con 60 unidades: ${noRentables.slice(0,3).map(r=>r.descripcion).join(', ')}${noRentables.length>3?'...':''}
-              </td></tr>`:''}
           </tbody>
         </table>
       </div>
