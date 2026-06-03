@@ -63,7 +63,12 @@ function calcMetrics(rows){
   const regMap={};rows.forEach(r=>{if(r.region)regMap[r.region]=(regMap[r.region]||0)+1;});
   const topRegion=Object.entries(regMap).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—';
   const pctCABA=rows.length?((regMap['Local - CABA']||0)/rows.length*100):0;
-  return {total,totalCajas,avgPct,otif,rojos,inc,diasKlozer,diasPrep,topRegion,pctCABA,count:rows.length,promPedido:rows.length?total/rows.length:0,promCaja:totalCajas?total/totalCajas:0};
+  const facturado=rows.reduce((s,r)=>s+(r.val_decl||0),0);
+  const verdes=rows.filter(r=>r.semaforo==='verde').length;
+  const pctVerdes=rows.length?verdes/rows.length*100:0;
+  const clientes=new Set(rows.map(r=>r.razon_social||r.dest).filter(Boolean)).size;
+  const cajasPorPedido=rows.length?totalCajas/rows.length:0;
+  return {total,totalCajas,avgPct,otif,rojos,inc,diasKlozer,diasPrep,topRegion,pctCABA,facturado,verdes,pctVerdes,clientes,cajasPorPedido,count:rows.length,promPedido:rows.length?total/rows.length:0,promCaja:totalCajas?total/totalCajas:0};
 }
 
 // ---- DATA ----
@@ -999,17 +1004,22 @@ function renderComparador(){
   const p=n=>'$'+Math.round(n).toLocaleString('es-AR');
   const pct=n=>n.toFixed(1)+'%';
   const num=n=>Math.round(n).toString();
+  const cj=n=>(Math.round(n*10)/10).toLocaleString('es-AR')+' cj';
 
   document.getElementById('cmp-header-a').textContent=mesA;
   document.getElementById('cmp-header-b').textContent=mesB;
 
   document.getElementById('cmp-tbody').innerHTML=[
-    cmpRow('Pedidos totales',    mA.count,        mB.count,        num, false),
-    cmpRow('Gasto total',        mA.total,         mB.total,         p,   false),
+    cmpRow('Pedidos totales',    mA.count,         mB.count,         num, false),
+    cmpRow('Clientes distintos', mA.clientes,      mB.clientes,      num, true),
+    cmpRow('Facturación total',  mA.facturado,     mB.facturado,     p,   true),
+    cmpRow('Gasto total (flete)',mA.total,         mB.total,         p,   false),
     cmpRow('Prom. por pedido',   mA.promPedido,    mB.promPedido,    p,   false),
     cmpRow('Prom. por caja',     mA.promCaja,      mB.promCaja,      p,   false),
     cmpRow('Cajas totales',      mA.totalCajas,    mB.totalCajas,    num, true),
+    cmpRow('Cajas por pedido',   mA.cajasPorPedido,mB.cajasPorPedido,cj,  true),
     cmpRow('% logístico prom.',  mA.avgPct,        mB.avgPct,        pct, false),
+    cmpRow('% pedidos verdes',   mA.pctVerdes,     mB.pctVerdes,     pct, true),
     cmpRow('OTIF',               mA.otif,          mB.otif,          pct, true),
     cmpRow('Pedidos rojos',      mA.rojos,         mB.rojos,         num, false),
   ].join('');
