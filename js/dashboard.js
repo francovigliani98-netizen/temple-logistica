@@ -1840,25 +1840,35 @@ function renderReglasVenta(){
     const upb=parseFloat(prod.unidades_por_bulto);
     if(!precioU||!upb) continue;
 
-    // Buscar mínimo de unidades
-    let minUnidades=null, pctFinal=null;
+    // Para cada producto buscamos: mínimo de unidades para <8% (verde),
+    // mínimo para <15% (no rojo) y el mejor caso alcanzable (piso de %).
+    // El % logístico baja con el volumen hasta el bracket de tarifa más barato
+    // y ahí se estanca; por eso si no llega al 8% mostramos igual el mejor caso.
+    let min8=null, min15=null, floorU=null, floorPct=null;
     for(let u=upb;u<=upb*60;u+=upb){
       const cajas=u/upb;
       const valorLista=precioU*u;
       const valorFinal=valorLista*(1-desc/100);
       const flete=calcFlete(zona,Math.ceil(cajas),cajas>=31?Math.ceil(cajas/31):0)||0;
+      if(flete<=0) continue;
       const totalLog=flete+valorLista*SEGURO; // seguro sobre el valor de mercadería (no el descontado)
       const pct=valorFinal>0?totalLog/valorFinal*100:999;
-      if(pct<8){minUnidades=u;pctFinal=pct;break;}
+      if(floorPct==null||pct<floorPct-1e-9){floorPct=pct;floorU=u;}
+      if(pct<8&&min8==null) min8={u,pct};
+      if(pct<15&&min15==null) min15={u,pct};
     }
+    // Nivel a mostrar: verde si llega a <8%, si no amarillo (<15%), si no el piso.
+    const nivel = min8?{...min8,tier:'verde'} : min15?{...min15,tier:'amarillo'} : floorU!=null?{u:floorU,pct:floorPct,tier:'rojo'}:null;
 
     results.push({
       descripcion:prod.descripcion,
       sku:prod.sku,
       precioU,upb,
-      minUnidades,
-      pctFinal,
-      cajas:minUnidades?Math.ceil(minUnidades/upb):null
+      rentable: !!min8,            // alcanza el objetivo <8%
+      minU: nivel?nivel.u:null,    // unidades del nivel a mostrar
+      pct: nivel?nivel.pct:null,
+      tier: nivel?nivel.tier:null,
+      cajas: nivel?Math.ceil(nivel.u/upb):null
     });
   }
 
@@ -1883,25 +1893,30 @@ function renderReglasVenta(){
     return {valor:vals[Math.floor(vals.length/2)], zonal}; // mediana (robusta a outliers)
   }
   const ref=valorPorCajaRef(zona);
-  // Mínimo de cajas (y su valor de pedido) para quedar por debajo de un umbral de % logístico
-  function minPedido(umbral){
+  // Escaneo único 1..30 cajas: registra el mínimo para <8% (verde), para <15%
+  // (amarillo) y el mejor caso alcanzable (piso de %). Así, aunque con descuento
+  // no llegue al 8%, siempre mostramos un monto mínimo en vez de "zona difícil".
+  function escaneoPedido(){
     if(!ref||!ref.valor) return null;
+    const r1k=v=>Math.round(v/1000)*1000;
+    let verde=null, amarillo=null, mejor=null;
     for(let n=1;n<=30;n++){
       const flete=calcFlete(zona,n,0)||0;
       if(flete<=0) continue;
       const valorLista=ref.valor*n;
       const valorFinal=valorLista*factorDesc;
-      const seguro=valorLista*SEGURO; // seguro sobre el valor de mercadería (no el descontado)
-      const pct=valorFinal>0?(flete+seguro)/valorFinal*100:999;
-      if(pct<umbral){
-        const lista=ref.valor*n, r1k=v=>Math.round(v/1000)*1000;
-        return {cajas:n, lista:r1k(lista), final:r1k(lista*factorDesc), pct};
-      }
+      const pct=valorFinal>0?(flete+valorLista*SEGURO)/valorFinal*100:999; // seguro sobre el valor de mercadería
+      const info={cajas:n, lista:r1k(valorLista), final:r1k(valorFinal), pct};
+      if(mejor==null||pct<mejor.pct-1e-9) mejor=info; // primer n del bracket más barato
+      if(pct<8&&!verde) verde=info;
+      if(pct<15&&!amarillo) amarillo=info;
     }
-    return null;
+    return {verde, amarillo, mejor};
   }
-  const verde=minPedido(8);          // rentable (<8%)
-  const amarillo=verde?null:minPedido(15); // si no llega a verde, mínimo para no entrar en rojo
+  const esc=escaneoPedido();
+  const verde=esc?esc.verde:null;          // rentable (<8%)
+  const amarillo=(esc&&!verde)?esc.amarillo:null; // si no llega a verde, mínimo para no entrar en rojo
+  const mejor=(esc&&!verde&&!amarillo)?esc.mejor:null; // si tampoco, el mejor caso posible
   const valorCajaR = ref?Math.round(ref.valor/1000)*1000:null;
 
   cont.innerHTML=`
@@ -1925,10 +1940,14 @@ function renderReglasVenta(){
           Con el valor típico de tus pedidos (~$${valorCajaR.toLocaleString('es-AR')}/caja) esta zona <strong>no llega al 8%</strong> ni con volumen. El mínimo para mantenerlo bajo 15% (no rojo) es <strong>$${amarillo.lista.toLocaleString('es-AR')}</strong> (≈ ${amarillo.cajas} caja${amarillo.cajas>1?'s':''}).${desc>0?`<br><span style="color:var(--text3);font-size:12px">Con ${desc}% de descuento: $${amarillo.final.toLocaleString('es-AR')} facturados.</span>`:''}
           <br><span style="color:var(--text3);font-size:11px">Para que sea verde hay que subir el valor por caja (productos más caros) o cobrar el flete aparte.</span>
         </div>
-      </div>` : `<div style="flex:1;min-width:240px;padding:14px 18px;background:rgba(220,38,38,0.06);border:1px solid rgba(220,38,38,0.18);border-radius:var(--radius-lg)">
-        <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">⚠️ Zona difícil de hacer rentable</div>
-        <div style="font-size:13px;color:var(--text2);line-height:1.5">Con el valor típico de tus pedidos (~$${valorCajaR.toLocaleString('es-AR')}/caja), el flete a esta zona no baja del 15% ni sumando volumen${desc>0?` con ${desc}% de descuento`:''}. Para que convenga hay que subir bastante el valor por caja o cobrar el flete aparte.</div>
-      </div>`}
+      </div>` : mejor ? `<div style="flex:1;min-width:240px;padding:14px 18px;background:rgba(220,38,38,0.06);border:1px solid rgba(220,38,38,0.18);border-radius:var(--radius-lg)">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">📦 Mínimo posible (esta zona no llega a rentable)</div>
+        <div style="font-size:26px;font-weight:800;color:#b91c1c;margin-bottom:6px">$${mejor.lista.toLocaleString('es-AR')} <span style="font-size:14px;font-weight:400;color:var(--text2)">a precio de lista</span></div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.5">
+          Con el valor típico de tus pedidos (~$${valorCajaR.toLocaleString('es-AR')}/caja)${desc>0?` y ${desc}% de descuento`:''}, lo mejor que se consigue en esta zona es <strong>${mejor.pct.toFixed(1)}%</strong> logístico, con un pedido de <strong>$${mejor.lista.toLocaleString('es-AR')}</strong> (≈ ${mejor.cajas} caja${mejor.cajas>1?'s':''}).${desc>0?`<br><span style="color:var(--text3);font-size:12px">Equivale a $${mejor.final.toLocaleString('es-AR')} facturados.</span>`:''}
+          <br><span style="color:var(--text3);font-size:11px">Para bajar más hay que reducir el descuento, subir el valor por caja o cobrar el flete aparte.</span>
+        </div>
+      </div>` : ''}
     </div>
   `;
 
@@ -1948,29 +1967,32 @@ function renderReglasTabla(){
   const matchSearch=r=>!srch||String(r.descripcion||'').toLowerCase().includes(srch)||String(r.sku||'').toLowerCase().includes(srch);
   const skuNum=v=>{const n=parseFloat(String(v).replace(/[^0-9.]/g,''));return isNaN(n)?Infinity:n;};
   const visibles=reglasResults.filter(matchSearch).sort((a,b)=>skuNum(a.sku)-skuNum(b.sku));
-  const rentables=visibles.filter(r=>r.minUnidades);
-  if(countEl) countEl.textContent=`${srch?`${visibles.length} resultado${visibles.length===1?'':'s'} · `:''}${rentables.length} de ${visibles.length} alcanzan el mínimo`;
+  const rentables=visibles.filter(r=>r.rentable);
+  if(countEl) countEl.textContent=`${srch?`${visibles.length} resultado${visibles.length===1?'':'s'} · `:''}${rentables.length} de ${visibles.length} llegan al 8%`;
+  const badgeCls={verde:'green',amarillo:'amber',rojo:'red'};
   tbody.innerHTML=visibles.length===0?`
       <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">${srch?'Ningún producto coincide con la búsqueda.':'Sin productos cargados. Subí la lista de precios desde el admin.'}</td></tr>
-    `:visibles.map(r=>r.minUnidades?`
-      <tr>
+    `:visibles.map(r=>{
+      if(r.minU==null) return `
+      <tr style="opacity:.6">
         <td class="num-right" style="font-size:12px;color:var(--text3)">${r.sku||'-'}</td>
         <td style="font-size:13px">${r.descripcion}</td>
         <td class="num-right" style="font-size:12px">$${Math.round(r.precioU).toLocaleString('es-AR')}</td>
-        <td class="num-right"><strong>${r.minUnidades}</strong> <span style="font-size:11px;color:var(--text3)">u</span></td>
+        <td colspan="4" style="font-size:12px;color:var(--text3)">Sin tarifa para esta zona</td>
+      </tr>`;
+      const cls=badgeCls[r.tier]||'gray';
+      const noVerde=!r.rentable; // alcanza el mejor caso (amarillo/rojo) pero no el 8%
+      return `
+      <tr${noVerde?' style="opacity:.85"':''}>
+        <td class="num-right" style="font-size:12px;color:var(--text3)">${r.sku||'-'}</td>
+        <td style="font-size:13px">${r.descripcion}</td>
+        <td class="num-right" style="font-size:12px">$${Math.round(r.precioU).toLocaleString('es-AR')}</td>
+        <td class="num-right"><strong>${r.minU}</strong> <span style="font-size:11px;color:var(--text3)">u</span></td>
         <td class="num-right">${r.cajas} cj</td>
-        <td class="num-right" style="font-weight:600">$${Math.round(r.minUnidades*r.precioU*(1-desc/100)).toLocaleString('es-AR')}</td>
-        <td class="num-right"><span class="badge green">${r.pctFinal.toFixed(1)}%</span></td>
-      </tr>
-    `:`
-      <tr style="opacity:.65">
-        <td class="num-right" style="font-size:12px;color:var(--text3)">${r.sku||'-'}</td>
-        <td style="font-size:13px">${r.descripcion}</td>
-        <td class="num-right" style="font-size:12px">$${Math.round(r.precioU).toLocaleString('es-AR')}</td>
-        <td class="num-right" colspan="3" style="font-size:12px;color:var(--text3)">No baja del 8% ni con 60 unidades</td>
-        <td class="num-right"><span class="badge gray">&gt;8%</span></td>
-      </tr>
-    `).join('');
+        <td class="num-right" style="font-weight:600">$${Math.round(r.minU*r.precioU*(1-desc/100)).toLocaleString('es-AR')}</td>
+        <td class="num-right"><span class="badge ${cls}"${noVerde?' title="Mejor caso posible en esta zona; no baja del 8%"':''}>${r.pct.toFixed(1)}%</span></td>
+      </tr>`;
+    }).join('');
 }
 
 window.addEventListener('DOMContentLoaded',loadData);
