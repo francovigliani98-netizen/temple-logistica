@@ -20,12 +20,14 @@ let TARIFF = {
   'Santa Cruz y TDF':       [42517,26378,21188,11028,9611,8875,null,null],
 };
 
+// litros = litros por BULTO (de la tabla precios) · bulto = unidades por bulto
+// (necesario porque pedido_productos.cantidad viene en UNIDADES, no en cajas)
 let PRODUCTS = {
-  'Cerveza':            { price: 13821,  margen: 0.35, litros: 7, key: 'sim-qty-cerveza' },
-  'Vermú 750ml':        { price: 52290,  margen: 0.50, litros: 9, key: 'sim-qty-vermu' },
-  'Gin 500ml':          { price: 54390,  margen: 0.55, litros: 6, key: 'sim-qty-gin500' },
-  'Gin 750ml':          { price: 81585,  margen: 0.55, litros: 9, key: 'sim-qty-gin750' },
-  'Alta Montaña 750ml': { price: 122378, margen: 0.60, litros: 9, key: 'sim-qty-alta' },
+  'Cerveza':            { price: 13821,  margen: 0.35, litros: 7, bulto: 24, key: 'sim-qty-cerveza' },
+  'Vermú 750ml':        { price: 52290,  margen: 0.50, litros: 9, bulto: 6,  key: 'sim-qty-vermu' },
+  'Gin 500ml':          { price: 54390,  margen: 0.55, litros: 6, bulto: 4,  key: 'sim-qty-gin500' },
+  'Gin 750ml':          { price: 81585,  margen: 0.55, litros: 9, bulto: 6,  key: 'sim-qty-gin750' },
+  'Alta Montaña 750ml': { price: 122378, margen: 0.60, litros: 9, bulto: 6,  key: 'sim-qty-alta' },
 };
 
 let allRows = [], filteredRows = [], charts = {};
@@ -1244,22 +1246,41 @@ function renderChartsServicio(){
 
 // ====== ANÁLISIS NUEVOS (eficiencia por región, producto, scorecards) ======
 
-// Litros/caja estimados por pedido a partir de la composición real de productos.
-// 'cantidad' en pedido_productos no son cajas, así que se usa solo como peso de
-// proporción: litros/caja del pedido = promedio ponderado de los litros/caja de
-// los productos presentes (PRODUCTS[p].litros viene de la tabla precios).
-const LITROS_CAJA_DEFAULT = 7;
-function pidLitrosCajaMap(){
+// Cajas (bultos) y litros REALES por pedido, reconstruidos desde la composición
+// de productos. NO usa el campo `cajas` de la tabla pedidos (está sucio: muchos
+// pedidos cargados como cajas=1 sin importar el contenido).
+// pedido_productos.cantidad viene en UNIDADES → cajas = unidades / unidades_por_bulto,
+// litros = cajas × litros_por_bulto. Los productos sin catálogo (~9% del volumen:
+// merchandising, vinos de reventa, etc.) no se cuentan.
+// Resuelve cualquier nombre de pedido_productos a su {bulto, litros} (litros = por
+// bulto). Regla de negocio: el gin propio (Nativo / Alta Montaña / Refugios) va en
+// cajas de 4 si es 500ml y de 6 si es 750ml, sin importar la variante. Captura así
+// nombres sueltos como "CAJA PRESENTACIÓN BOTELLA NATIVO 500 ML" que no caen en las
+// claves canónicas de PRODUCTS.
+function resolverBultoLitros(nombre){
+  const direct=PRODUCTS[nombre];
+  if(direct&&direct.bulto) return direct;
+  const n=(nombre||'').toUpperCase();
+  const esGinPropio = n.includes('NATIVO')||n.includes('ALTA MONTA')||n.includes('REFUGIO')
+    ||(n.includes('GIN')&&n.includes('BOSQUE'));
+  if(esGinPropio){
+    if(n.includes('500')) return PRODUCTS['Gin 500ml'];
+    if(n.includes('750')) return PRODUCTS['Gin 750ml'];
+  }
+  return null; // sin catálogo (vinos de reventa, merchandising, etc.)
+}
+
+function pidCajasLitrosMap(){
   const acc={};
   mixData.forEach(r=>{
-    const p=PRODUCTS[r.producto]; if(!p||p.litros==null) return;
+    const p=resolverBultoLitros(r.producto); if(!p||!p.bulto) return;
     const q=parseFloat(r.cantidad)||0; if(q<=0) return;
-    if(!acc[r.pid]) acc[r.pid]={lit:0,qty:0};
-    acc[r.pid].lit+=q*p.litros; acc[r.pid].qty+=q;
+    const cajas=q/p.bulto;
+    if(!acc[r.pid]) acc[r.pid]={cajas:0,litros:0};
+    acc[r.pid].cajas+=cajas;
+    if(p.litros!=null) acc[r.pid].litros+=cajas*p.litros;
   });
-  const out={};
-  Object.entries(acc).forEach(([pid,d])=>{ if(d.qty>0) out[pid]=d.lit/d.qty; });
-  return out;
+  return acc;
 }
 
 // Opciones de barra horizontal con valores en pesos (mismo estilo que c-region)
@@ -1272,23 +1293,27 @@ function barOptsPeso(){
 // ---- #3 + #8: eficiencia y costo unitario por región ----
 function renderEficienciaRegion(){
   const rows=filteredRows;
-  const litPorCaja=pidLitrosCajaMap();
+  const compMap=pidCajasLitrosMap();
   const reg={};
   rows.forEach(r=>{
     const k=r.region||'—';
-    if(!reg[k]) reg[k]={pedidos:0,cajas:0,gasto:0,litros:0,pctSum:0,pctN:0};
+    if(!reg[k]) reg[k]={pedidos:0,cajas:0,gasto:0,litros:0,pctSum:0,pctN:0,gastoComp:0,pedComp:0};
     const d=reg[k];
-    d.pedidos++; d.cajas+=(r.cajas||0); d.gasto+=(r.total||0);
-    const lpc = litPorCaja[r.pid]!=null?litPorCaja[r.pid]:LITROS_CAJA_DEFAULT;
-    d.litros+=(r.cajas||0)*lpc;
+    d.pedidos++; d.gasto+=(r.total||0);
+    // $/caja y $/litro solo sobre pedidos con composición conocida, para que
+    // numerador (gasto) y denominador (cajas/litros) sean consistentes.
+    const c=compMap[r.pid];
+    if(c && c.cajas>0){
+      d.cajas+=c.cajas; d.litros+=c.litros; d.gastoComp+=(r.total||0); d.pedComp++;
+    }
     if(r.pct_log!=null){ d.pctSum+=r.pct_log; d.pctN++; }
   });
   const arr=Object.entries(reg).map(([name,d])=>({
     name, pedidos:d.pedidos,
-    cajasPed:d.pedidos?d.cajas/d.pedidos:0,
+    cajasPed:d.pedComp?d.cajas/d.pedComp:0,
     pct:d.pctN?d.pctSum/d.pctN:0,
-    costoCaja:d.cajas?d.gasto/d.cajas:0,
-    costoLitro:d.litros?d.gasto/d.litros:0,
+    costoCaja:d.cajas?d.gastoComp/d.cajas:0,
+    costoLitro:d.litros?d.gastoComp/d.litros:0,
     gasto:d.gasto
   })).sort((a,b)=>b.gasto-a.gasto);
 

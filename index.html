@@ -196,7 +196,7 @@ th[data-sort]:hover{background:var(--border2)}
       <span class="desc">Más allá de cuánto se gasta: cuánto cuesta mover <strong>cada caja</strong> y <strong>cada litro</strong> a cada zona, y qué tan eficientes son los envíos (% logístico y cajas por pedido). Comparar el $/caja entre zonas es más justo que el % logístico, que mezcla el valor de la mercadería con la distancia.</span>
     </div>
     <div class="charts-row charts-2" style="margin-bottom:16px">
-      <div class="chart-card"><h3>Costo logístico por caja según región</h3><div class="chart-sub">$/caja = gasto de flete ÷ cajas despachadas · Las zonas lejanas cuestan más por caja independientemente del valor del producto</div><div class="chart-wrap tall"><canvas id="c-costo-caja"></canvas></div></div>
+      <div class="chart-card"><h3>Costo logístico por caja según región</h3><div class="chart-sub">$/caja = gasto de flete ÷ cajas despachadas · Las cajas se reconstruyen desde la composición real del pedido (unidades ÷ unidades por bulto), no del campo de cajas cargado</div><div class="chart-wrap tall"><canvas id="c-costo-caja"></canvas></div></div>
       <div class="chart-card"><h3>Costo logístico por litro según región</h3><div class="chart-sub">$/litro = gasto de flete ÷ litros despachados · Los litros se estiman desde la composición real de productos de cada pedido</div><div class="chart-wrap tall"><canvas id="c-costo-litro"></canvas></div></div>
     </div>
     <div class="table-card">
