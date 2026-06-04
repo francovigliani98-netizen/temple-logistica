@@ -335,8 +335,9 @@ function applyGlobalFilter(){
 
 function renderAll(){
   renderKPIs();renderChartsMain();renderChartsCostos();
-  renderChartsClientes();renderChartsServicio();renderTable();renderThresholds();
+  renderChartsClientes();renderChartsServicio();renderTable();
   renderComparador();
+  renderEficienciaRegion();renderAnalisisProducto();renderScorecards();
 }
 
 // ---- OPCIÓN 3: DELTAS EN KPIs ----
@@ -647,133 +648,6 @@ function renderChartsMain(){
 
 function renderChartsCostos(){
   const rows=filteredRows;
-  // % por producto
-  const prodKeywords={'Cerveza':['CERVEZA','IPA','STOUT','PORTER','ALE','LAGER'],'Gin':['GIN','BOSQUE','ALTA MONTA'],'Vermú':['VERMÚ','VERMU','FERIADO'],'Barril':['BARRIL']};
-  const prodPct={};
-  // ---- PARETO: TOP 8 PRODUCTOS POR VOLUMEN Y GASTO ----
-  const paretoVolMap={};
-  mixData.forEach(r=>{
-    if(!r.producto) return;
-    paretoVolMap[r.producto]=(paretoVolMap[r.producto]||0)+(parseFloat(r.cantidad)||0);
-  });
-
-  const paretoGastoMap={};
-  const pedidoTotales={};
-  rows.forEach(r=>{if(r.pid&&r.total)pedidoTotales[r.pid]=r.total;});
-  const pidProds={};
-  mixData.forEach(r=>{
-    if(!r.pid||!r.producto) return;
-    if(!pidProds[r.pid]) pidProds[r.pid]=[];
-    pidProds[r.pid].push({producto:r.producto,cantidad:parseFloat(r.cantidad)||0});
-  });
-  Object.entries(pidProds).forEach(([pid,prods])=>{
-    const total=pedidoTotales[pid];
-    if(!total) return;
-    const totalCant=prods.reduce((s,p)=>s+p.cantidad,0);
-    if(!totalCant) return;
-    prods.forEach(p=>{
-      const proporcion=p.cantidad/totalCant;
-      paretoGastoMap[p.producto]=(paretoGastoMap[p.producto]||0)+(total*proporcion);
-    });
-  });
-
-  // Función para construir top 8 + Otros
-  function topPareto(map){
-    const sorted=Object.keys(map).filter(p=>map[p]>0).sort((a,b)=>map[b]-map[a]);
-    const top8=sorted.slice(0,8);
-    const otros=sorted.slice(8);
-    const total=Object.values(map).reduce((s,v)=>s+v,0);
-    const labels=top8.map(p=>p.length>28?p.substring(0,26)+'…':p);
-    const values=top8.map(p=>Math.round(map[p]));
-    if(otros.length>0){
-      const sumOtros=Math.round(otros.reduce((s,p)=>s+map[p],0));
-      labels.push(`Otros (${otros.length} prod.)`);
-      values.push(sumOtros);
-    }
-    // Calcular % acumulado solo sobre los top 8 (no incluir "Otros")
-    let acc=0;
-    const acumPct=values.map((v,i)=>{
-      if(i===values.length-1&&otros.length>0) return null; // No mostrar % en "Otros"
-      acc+=v;
-      return Math.round(acc/total*100);
-    });
-    // Cuántos top productos cubren el 80%
-    let prod80=0,accT=0;
-    for(let i=0;i<top8.length;i++){accT+=values[i];if(accT/total>=0.8){prod80=i+1;break;}}
-    return {labels,values,acumPct,prod80};
-  }
-
-  const pVol=topPareto(paretoVolMap);
-  const pGasto=topPareto(paretoGastoMap);
-
-  if(pVol.values.length>0){
-    // Colorear: barras top hasta llegar al 80% más oscuras, el resto más claras
-    const colorsVol=pVol.values.map((_,i)=>{
-      if(i===pVol.labels.length-1&&pVol.labels[i].startsWith('Otros')) return 'rgba(148,163,184,0.6)';
-      return i<pVol.prod80?'rgba(37,99,235,0.95)':'rgba(37,99,235,0.5)';
-    });
-    const colorsGasto=pGasto.values.map((_,i)=>{
-      if(i===pGasto.labels.length-1&&pGasto.labels[i].startsWith('Otros')) return 'rgba(148,163,184,0.6)';
-      return i<pGasto.prod80?'rgba(217,119,6,0.95)':'rgba(217,119,6,0.5)';
-    });
-
-    mkChart('c-pareto-vol',{
-      type:'bar',
-      data:{labels:pVol.labels,datasets:[
-        {label:'Cajas',data:pVol.values,backgroundColor:colorsVol,borderRadius:4,borderSkipped:false}
-      ]},
-      options:{
-        indexAxis:'y',
-        responsive:true,maintainAspectRatio:false,
-        plugins:{
-          legend:{display:false},
-          tooltip:{callbacks:{
-            label:c=>{
-              const v=c.raw;
-              const pct=pVol.acumPct[c.dataIndex];
-              return pct!=null?`${v.toLocaleString('es-AR')} cajas · ${pct}% acumulado`:`${v.toLocaleString('es-AR')} cajas`;
-            }
-          }}
-        },
-        scales:{
-          x:{grid:{color:gridC},ticks:{color:textC,font:{size:11}},title:{display:true,text:'Cajas',color:textC,font:{size:11}}},
-          y:{grid:{display:false},ticks:{color:textC,font:{size:12},font:{weight:'500'}}}
-        }
-      }
-    });
-
-    mkChart('c-pareto-gasto',{
-      type:'bar',
-      data:{labels:pGasto.labels,datasets:[
-        {label:'Gasto',data:pGasto.values,backgroundColor:colorsGasto,borderRadius:4,borderSkipped:false}
-      ]},
-      options:{
-        indexAxis:'y',
-        responsive:true,maintainAspectRatio:false,
-        plugins:{
-          legend:{display:false},
-          tooltip:{callbacks:{
-            label:c=>{
-              const v=c.raw;
-              const pct=pGasto.acumPct[c.dataIndex];
-              return pct!=null?`$${v.toLocaleString('es-AR')} · ${pct}% acumulado`:`$${v.toLocaleString('es-AR')}`;
-            }
-          }}
-        },
-        scales:{
-          x:{grid:{color:gridC},ticks:{color:textC,font:{size:11},callback:v=>'$'+Math.round(v/1000)+'k'},title:{display:true,text:'Gasto logístico',color:textC,font:{size:11}}},
-          y:{grid:{display:false},ticks:{color:textC,font:{size:12},font:{weight:'500'}}}
-        }
-      }
-    });
-
-    const insightEl=document.getElementById('pareto-insight');
-    if(insightEl) insightEl.innerHTML=`
-      <span style="margin-right:20px">📦 <strong>${pVol.prod80} producto${pVol.prod80>1?'s':''}</strong> generan el 80% del volumen</span>
-      <span>💸 <strong>${pGasto.prod80} producto${pGasto.prod80>1?'s':''}</strong> generan el 80% del gasto logístico</span>
-    `;
-  }
-
   // ---- GASTO POR REGIÓN (movido de Resumen) ----
   const regMap={};rows.forEach(r=>{if(r.region)regMap[r.region]=(regMap[r.region]||0)+(r.total||0);});
   const rL=Object.keys(regMap).sort((a,b)=>regMap[b]-regMap[a]).slice(0,8);
@@ -944,29 +818,6 @@ function renderChartsCostos(){
       'y-vol':{type:'linear',position:'left',grid:{color:gridC},ticks:{color:COLORS.teal,font:{size:11}},title:{display:true,text:'Entregas',color:COLORS.teal,font:{size:11}}},
       'y-costo':{type:'linear',position:'right',grid:{display:false},ticks:{color:COLORS.amber,font:{size:11},callback:v=>'$'+Math.round(v/1000)+'k'},title:{display:true,text:'Costo promedio',color:COLORS.amber,font:{size:11}}}
     }}});
-  renderThresholds();
-}
-
-function renderThresholds(){
-  const tbody=document.getElementById('thresh-tbody');if(!tbody)return;
-  // Matriz real: zona × rangos de cajas
-  const ranges=[[1,1,'1'],[2,3,'2-3'],[4,6,'4-6'],[7,10,'7-10'],[11,20,'11-20'],[21,30,'21-30'],[31,9999,'31+']];
-  const zonas=Object.keys(TARIFF);
-  tbody.innerHTML=zonas.map(z=>{
-    const cells=ranges.map(([lo,hi])=>{
-      const peds=allRows.filter(r=>r.region===z&&r.cajas>=lo&&r.cajas<=hi&&r.pct_log!=null);
-      if(peds.length===0) return `<td class="num-right" style="color:var(--text3);font-size:11px">—</td>`;
-      const avg=peds.reduce((s,r)=>s+r.pct_log,0)/peds.length;
-      const cls=avg<8?'green':avg<15?'amber':'red';
-      return `<td class="num-right">
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:1px">
-          <span class="badge ${cls}" style="font-weight:600">${avg.toFixed(1)}%</span>
-          <span style="font-size:9px;color:var(--text3)">${peds.length} ped</span>
-        </div>
-      </td>`;
-    }).join('');
-    return `<tr><td><strong>${z}</strong></td>${cells}</tr>`;
-  }).join('');
 }
 
 // ---- OPCIÓN 2: PANEL COMPARADOR ----
@@ -1389,6 +1240,197 @@ function renderChartsServicio(){
         'y-pct':{type:'linear',position:'right',grid:{display:false},ticks:{color:COLORS.navy,font:{size:11},callback:v=>v+'%'},title:{display:true,text:'% logístico',color:COLORS.navy,font:{size:11}},min:0}
       }}});
   }
+}
+
+// ====== ANÁLISIS NUEVOS (eficiencia por región, producto, scorecards) ======
+
+// Litros/caja estimados por pedido a partir de la composición real de productos.
+// 'cantidad' en pedido_productos no son cajas, así que se usa solo como peso de
+// proporción: litros/caja del pedido = promedio ponderado de los litros/caja de
+// los productos presentes (PRODUCTS[p].litros viene de la tabla precios).
+const LITROS_CAJA_DEFAULT = 7;
+function pidLitrosCajaMap(){
+  const acc={};
+  mixData.forEach(r=>{
+    const p=PRODUCTS[r.producto]; if(!p||p.litros==null) return;
+    const q=parseFloat(r.cantidad)||0; if(q<=0) return;
+    if(!acc[r.pid]) acc[r.pid]={lit:0,qty:0};
+    acc[r.pid].lit+=q*p.litros; acc[r.pid].qty+=q;
+  });
+  const out={};
+  Object.entries(acc).forEach(([pid,d])=>{ if(d.qty>0) out[pid]=d.lit/d.qty; });
+  return out;
+}
+
+// Opciones de barra horizontal con valores en pesos (mismo estilo que c-region)
+function barOptsPeso(){
+  return {indexAxis:'y',responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'$'+Math.round(c.raw).toLocaleString('es-AR')}}},
+    scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:10},callback:v=>'$'+Math.round(v/1000)+'k'}},y:{grid:{display:false},ticks:{color:textC,font:{size:10}}}}};
+}
+
+// ---- #3 + #8: eficiencia y costo unitario por región ----
+function renderEficienciaRegion(){
+  const rows=filteredRows;
+  const litPorCaja=pidLitrosCajaMap();
+  const reg={};
+  rows.forEach(r=>{
+    const k=r.region||'—';
+    if(!reg[k]) reg[k]={pedidos:0,cajas:0,gasto:0,litros:0,pctSum:0,pctN:0};
+    const d=reg[k];
+    d.pedidos++; d.cajas+=(r.cajas||0); d.gasto+=(r.total||0);
+    const lpc = litPorCaja[r.pid]!=null?litPorCaja[r.pid]:LITROS_CAJA_DEFAULT;
+    d.litros+=(r.cajas||0)*lpc;
+    if(r.pct_log!=null){ d.pctSum+=r.pct_log; d.pctN++; }
+  });
+  const arr=Object.entries(reg).map(([name,d])=>({
+    name, pedidos:d.pedidos,
+    cajasPed:d.pedidos?d.cajas/d.pedidos:0,
+    pct:d.pctN?d.pctSum/d.pctN:0,
+    costoCaja:d.cajas?d.gasto/d.cajas:0,
+    costoLitro:d.litros?d.gasto/d.litros:0,
+    gasto:d.gasto
+  })).sort((a,b)=>b.gasto-a.gasto);
+
+  const tb=document.getElementById('eficiencia-region-tbody');
+  if(tb) tb.innerHTML=arr.map(r=>{
+    const badge=r.pct<8?'green':r.pct<15?'amber':'red';
+    return `<tr><td>${r.name}</td><td class="num-right">${r.pedidos}</td>
+      <td class="num-right">${r.cajasPed.toFixed(1)}</td>
+      <td class="num-right"><span class="badge ${badge}">${r.pct.toFixed(1)}%</span></td>
+      <td class="num-right">${peso(r.costoCaja)}</td>
+      <td class="num-right">${peso(r.costoLitro)}</td>
+      <td class="num-right">${peso(r.gasto)}</td></tr>`;
+  }).join('');
+
+  const byCaja=[...arr].filter(r=>r.costoCaja>0).sort((a,b)=>b.costoCaja-a.costoCaja);
+  mkChart('c-costo-caja',{type:'bar',data:{labels:byCaja.map(r=>r.name),
+    datasets:[{data:byCaja.map(r=>Math.round(r.costoCaja)),backgroundColor:COLORS.teal,borderRadius:4,borderSkipped:false}]},
+    options:barOptsPeso()});
+  const byLitro=[...arr].filter(r=>r.costoLitro>0).sort((a,b)=>b.costoLitro-a.costoLitro);
+  mkChart('c-costo-litro',{type:'bar',data:{labels:byLitro.map(r=>r.name),
+    datasets:[{data:byLitro.map(r=>Math.round(r.costoLitro)),backgroundColor:COLORS.purple,borderRadius:4,borderSkipped:false}]},
+    options:barOptsPeso()});
+}
+
+// ---- #9: % logístico por producto + productos que viajan juntos ----
+function renderAnalisisProducto(){
+  const rows=filteredRows;
+  const pidSet=new Set(rows.map(r=>r.pid));
+  const pctByPid={}; rows.forEach(r=>{ if(r.pid&&r.pct_log!=null) pctByPid[r.pid]=r.pct_log; });
+
+  // Composición por pedido (solo pedidos del período filtrado)
+  const pidProds={};
+  mixData.forEach(r=>{
+    if(!r.pid||!r.producto||!pidSet.has(r.pid)) return;
+    const q=parseFloat(r.cantidad)||0; if(q<=0) return;
+    if(!pidProds[r.pid]) pidProds[r.pid]={};
+    pidProds[r.pid][r.producto]=(pidProds[r.pid][r.producto]||0)+q;
+  });
+
+  // % logístico atribuido a cada producto, ponderado por su proporción de cajas
+  const prodPct={}; // producto -> {wSum, wPctSum}
+  Object.entries(pidProds).forEach(([pid,prods])=>{
+    const pct=pctByPid[pid]; if(pct==null) return;
+    const totalQ=Object.values(prods).reduce((s,v)=>s+v,0); if(!totalQ) return;
+    Object.entries(prods).forEach(([prod,q])=>{
+      const w=q/totalQ;
+      if(!prodPct[prod]) prodPct[prod]={w:0,wp:0};
+      prodPct[prod].w+=w; prodPct[prod].wp+=w*pct;
+    });
+  });
+  const prodArr=Object.entries(prodPct)
+    .filter(([,d])=>d.w>=1)            // al menos ~1 pedido equivalente
+    .map(([name,d])=>({name,pct:d.wp/d.w}))
+    .sort((a,b)=>b.pct-a.pct).slice(0,10);
+  const labels=prodArr.map(p=>p.name.length>22?p.name.slice(0,20)+'…':p.name);
+  const colors=prodArr.map(p=>p.pct<8?COLORS.green:p.pct<15?COLORS.amber:COLORS.red);
+  mkChart('c-pct-producto',{type:'bar',data:{labels,datasets:[{data:prodArr.map(p=>Math.round(p.pct*10)/10),backgroundColor:colors,borderRadius:4,borderSkipped:false}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{title:c=>prodArr[c[0].dataIndex].name,label:c=>`% logístico: ${c.raw}%`}}},
+      scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:10},callback:v=>v+'%'}},y:{grid:{display:false},ticks:{color:textC,font:{size:11}}}}}});
+
+  // Co-ocurrencia: pares de productos en un mismo pedido
+  const pairCount={}, prodOrders={};
+  Object.values(pidProds).forEach(prods=>{
+    const list=Object.keys(prods);
+    list.forEach(p=>{ prodOrders[p]=(prodOrders[p]||0)+1; });
+    for(let i=0;i<list.length;i++) for(let j=i+1;j<list.length;j++){
+      const key=[list[i],list[j]].sort().join(' ││ ');
+      pairCount[key]=(pairCount[key]||0)+1;
+    }
+  });
+  const pairs=Object.entries(pairCount).map(([key,n])=>{
+    const [a,b]=key.split(' ││ ');
+    const union=(prodOrders[a]||0)+(prodOrders[b]||0)-n; // pedidos con al menos uno
+    return {a,b,n,pct:union?n/union*100:0};
+  }).sort((x,y)=>y.n-x.n).slice(0,10);
+  const cb=document.getElementById('cooc-tbody');
+  const shrt=s=>s.length>20?s.slice(0,18)+'…':s;
+  if(cb) cb.innerHTML=pairs.length?pairs.map(p=>`<tr>
+      <td title="${p.a} + ${p.b}"><span style="font-weight:500">${shrt(p.a)}</span> <span style="color:var(--text3)">+</span> <span style="font-weight:500">${shrt(p.b)}</span></td>
+      <td class="num-right">${p.n}</td>
+      <td class="num-right"><span class="badge ${p.pct>=50?'green':p.pct>=25?'amber':''}">${p.pct.toFixed(0)}%</span></td>
+    </tr>`).join('')
+    :'<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text3)">Sin combinaciones en el período</td></tr>';
+}
+
+// ---- #7: scorecard de cumplimiento por región y por cliente ----
+function renderScorecards(){
+  const rows=filteredRows;
+  const esError=r=>r.estado==='Devuelto'||r.estado==='Eliminado'||r.estado==='Entrega Parcial';
+
+  const reg={};
+  rows.forEach(r=>{
+    const k=r.region||'—';
+    if(!reg[k]) reg[k]={ped:0,otifSi:0,otifTot:0,err:0,devol:0,kSum:0,kN:0};
+    const d=reg[k]; d.ped++;
+    if(r.otif!==''&&r.otif!=null){ d.otifTot++; if(r.otif==='Sí') d.otifSi++; }
+    if(esError(r)) d.err++;
+    if(r.estado==='Devuelto') d.devol++;
+    if(r.dias_klozer!=null){ d.kSum+=r.dias_klozer; d.kN++; }
+  });
+  const regArr=Object.entries(reg).map(([name,d])=>({
+    name,ped:d.ped,
+    otif:d.otifTot?d.otifSi/d.otifTot*100:null,
+    err:d.ped?d.err/d.ped*100:0,
+    dias:d.kN?d.kSum/d.kN:null,devol:d.devol
+  })).sort((a,b)=>b.ped-a.ped);
+  const rtb=document.getElementById('score-region-tbody');
+  if(rtb) rtb.innerHTML=regArr.map(r=>{
+    const oB=r.otif==null?'':r.otif>=85?'green':r.otif>=70?'amber':'red';
+    const eB=r.err<2?'green':r.err<5?'amber':'red';
+    return `<tr><td>${r.name}</td><td class="num-right">${r.ped}</td>
+      <td class="num-right">${r.otif==null?'—':`<span class="badge ${oB}">${r.otif.toFixed(0)}%</span>`}</td>
+      <td class="num-right"><span class="badge ${eB}">${r.err.toFixed(1)}%</span></td>
+      <td class="num-right">${r.dias==null?'—':r.dias.toFixed(1)}</td>
+      <td class="num-right ${r.devol>0?'red':''}">${r.devol}</td></tr>`;
+  }).join('');
+
+  const cli={};
+  rows.forEach(r=>{
+    const k=r.razon_social||r.dest||'Desconocido';
+    if(!cli[k]) cli[k]={ped:0,otifSi:0,otifTot:0,err:0};
+    const d=cli[k]; d.ped++;
+    if(r.otif!==''&&r.otif!=null){ d.otifTot++; if(r.otif==='Sí') d.otifSi++; }
+    if(esError(r)) d.err++;
+  });
+  const cliArr=Object.entries(cli).map(([name,d])=>({
+    name,ped:d.ped,err:d.err,
+    otif:d.otifTot?d.otifSi/d.otifTot*100:null,
+    tasa:d.ped?d.err/d.ped*100:0
+  })).filter(c=>c.err>0).sort((a,b)=>b.tasa-a.tasa||b.err-a.err).slice(0,15);
+  const ctb=document.getElementById('score-cliente-tbody');
+  if(ctb) ctb.innerHTML=cliArr.length?cliArr.map(c=>{
+    const oB=c.otif==null?'':c.otif>=85?'green':c.otif>=70?'amber':'red';
+    const tB=c.tasa<10?'amber':'red';
+    return `<tr><td title="${c.name}" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</td>
+      <td class="num-right">${c.ped}</td>
+      <td class="num-right">${c.otif==null?'—':`<span class="badge ${oB}">${c.otif.toFixed(0)}%</span>`}</td>
+      <td class="num-right">${c.err}</td>
+      <td class="num-right"><span class="badge ${tB}">${c.tasa.toFixed(0)}%</span></td></tr>`;
+  }).join('')
+    :'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text3)">Sin incidencias en el período 🎉</td></tr>';
 }
 
 function sortTable(col){

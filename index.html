@@ -182,23 +182,6 @@ th[data-sort]:hover{background:var(--border2)}
       <div class="chart-card"><h3>% logístico según cantidad de cajas por pedido</h3><div class="chart-sub">Pedidos chicos son proporcionalmente mucho más caros · Consolidar cajas en un mismo envío baja el % logístico</div><div class="chart-wrap tall"><canvas id="c-cajas"></canvas></div></div>
     </div>
     <div class="divider"></div>
-    <div class="section-header">
-      <h2>¿Qué productos mueven el gasto? (Pareto 80/20)</h2>
-      <span class="desc">El principio de Pareto dice que pocos productos explican la mayoría del volumen y del costo — acá lo vemos con los datos reales de Temple</span>
-    </div>
-    <div style="padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:16px;font-size:13px;color:var(--text2)" id="pareto-insight">Calculando...</div>
-    <div class="charts-row charts-2">
-      <div class="chart-card">
-        <h3>Productos que más cajas generan</h3>
-        <div class="chart-sub">Top 8 productos por volumen despachado · Barras intensas = los que acumulan el 80% del total · Los demás se agrupan en "Otros"</div>
-        <div class="chart-wrap" style="height:340px"><canvas id="c-pareto-vol"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <h3>Productos que más gasto logístico generan</h3>
-        <div class="chart-sub">No siempre coincide con el volumen — un producto puede tener pocas cajas pero envíos muy chicos (caros) · Barras intensas = 80% del gasto</div>
-        <div class="chart-wrap" style="height:340px"><canvas id="c-pareto-gasto"></canvas></div>
-      </div>
-    </div>
     <div class="charts-row charts-2">
       <div class="chart-card"><h3>Gasto logístico acumulado en el año</h3><div class="chart-sub">Suma mensual del gasto total en flete · Útil para proyectar el cierre del año y comparar contra presupuesto</div><div class="chart-wrap tall"><canvas id="c-acumulado"></canvas></div></div>
       <div class="chart-card">
@@ -208,11 +191,36 @@ th[data-sort]:hover{background:var(--border2)}
       </div>
     </div>
     <div class="divider"></div>
-    <div class="section-header"><h2>Matriz de % logístico por zona y cantidad de cajas</h2><span class="desc">Cada celda muestra el % logístico promedio real para esa combinación zona/cajas · Verde &lt;8% · Amarillo 8–15% · Rojo &gt;15% · "n ped" = pedidos que forman ese promedio</span></div>
+    <div class="section-header">
+      <h2>Eficiencia y costo unitario por región</h2>
+      <span class="desc">Más allá de cuánto se gasta: cuánto cuesta mover <strong>cada caja</strong> y <strong>cada litro</strong> a cada zona, y qué tan eficientes son los envíos (% logístico y cajas por pedido). Comparar el $/caja entre zonas es más justo que el % logístico, que mezcla el valor de la mercadería con la distancia.</span>
+    </div>
+    <div class="charts-row charts-2" style="margin-bottom:16px">
+      <div class="chart-card"><h3>Costo logístico por caja según región</h3><div class="chart-sub">$/caja = gasto de flete ÷ cajas despachadas · Las zonas lejanas cuestan más por caja independientemente del valor del producto</div><div class="chart-wrap tall"><canvas id="c-costo-caja"></canvas></div></div>
+      <div class="chart-card"><h3>Costo logístico por litro según región</h3><div class="chart-sub">$/litro = gasto de flete ÷ litros despachados · Los litros se estiman desde la composición real de productos de cada pedido</div><div class="chart-wrap tall"><canvas id="c-costo-litro"></canvas></div></div>
+    </div>
     <div class="table-card">
+      <div class="table-header">
+        <h3>Tabla de eficiencia por región</h3>
+        <span style="font-size:12px;color:var(--text3)">Ordenada por gasto · El color del % logístico marca verde &lt;8% · amarillo 8–15% · rojo &gt;15%</span>
+      </div>
       <div class="table-wrap"><table><thead><tr>
-        <th>Zona</th><th class="num-right">1 caja</th><th class="num-right">2-3</th><th class="num-right">4-6</th><th class="num-right">7-10</th><th class="num-right">11-20</th><th class="num-right">21-30</th><th class="num-right">31+</th>
-      </tr></thead><tbody id="thresh-tbody"></tbody></table></div>
+        <th>Región</th><th class="num-right">Pedidos</th><th class="num-right">Cajas/pedido</th><th class="num-right">% log. prom.</th><th class="num-right">$/caja</th><th class="num-right">$/litro</th><th class="num-right">Gasto total</th>
+      </tr></thead><tbody id="eficiencia-region-tbody"></tbody></table></div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-header">
+      <h2>¿Qué productos arrastran el costo logístico?</h2>
+      <span class="desc">El % logístico promedio atribuible a cada producto (ponderado por su peso en cajas dentro de cada pedido) y qué productos suelen viajar juntos en un mismo envío — útil para impulsar combos que consoliden carga y mejoren la eficiencia.</span>
+    </div>
+    <div class="charts-row charts-2">
+      <div class="chart-card"><h3>% logístico promedio por producto</h3><div class="chart-sub">Atribuye a cada producto el % logístico de los pedidos donde aparece, según su proporción de cajas · Más alto = viaja en envíos proporcionalmente más caros</div><div class="chart-wrap tall"><canvas id="c-pct-producto"></canvas></div></div>
+      <div class="chart-card">
+        <h3>Productos que viajan juntos</h3>
+        <div class="chart-sub">Combinaciones que más aparecen en un mismo pedido · "% de sus pedidos" = cuántos de los pedidos que contienen a alguno de los dos los llevan juntos</div>
+        <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Combinación</th><th class="num-right">Pedidos juntos</th><th class="num-right">% de sus pedidos</th></tr></thead><tbody id="cooc-tbody"></tbody></table></div>
+      </div>
     </div>
   </div>
 
@@ -293,6 +301,22 @@ th[data-sort]:hover{background:var(--border2)}
     <div class="section-header"><h2>Evolución del semáforo logístico por mes</h2><span class="desc">Barras apiladas: cantidad de pedidos en verde, amarillo y rojo cada mes · Línea: % logístico promedio · Sirve para ver si la eficiencia mejora o empeora con el tiempo</span></div>
     <div class="chart-card" style="margin-bottom:16px">
       <div class="chart-wrap" style="height:300px"><canvas id="c-pct-tendencia"></canvas></div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-header">
+      <h2>Cumplimiento por región y por cliente</h2>
+      <span class="desc">El OTIF global no muestra <em>dónde</em> se rompe el servicio. Acá se desglosa por destino y por cliente para detectar zonas conflictivas y clientes con entregas problemáticas. Tasa de error = devueltos + eliminados + entregas parciales sobre el total.</span>
+    </div>
+    <div class="charts-row charts-2">
+      <div class="table-card">
+        <div class="table-header"><h3>Scorecard por región</h3><span style="font-size:12px;color:var(--text3)">Ordenado por cantidad de pedidos</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Región</th><th class="num-right">Pedidos</th><th class="num-right">OTIF</th><th class="num-right">Tasa error</th><th class="num-right">Días Klozer</th><th class="num-right">Devol.</th></tr></thead><tbody id="score-region-tbody"></tbody></table></div>
+      </div>
+      <div class="table-card">
+        <div class="table-header"><h3>Clientes con más problemas de entrega</h3><span style="font-size:12px;color:var(--text3)">Con al menos 1 incidencia · ordenado por tasa de error</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Cliente</th><th class="num-right">Pedidos</th><th class="num-right">OTIF</th><th class="num-right">Incidencias</th><th class="num-right">Tasa error</th></tr></thead><tbody id="score-cliente-tbody"></tbody></table></div>
+      </div>
     </div>
   </div>
 
