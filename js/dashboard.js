@@ -1246,6 +1246,10 @@ function renderChartsServicio(){
 // pedido_productos.cantidad viene en UNIDADES → cajas = unidades / unidades_por_bulto,
 // litros = cajas × litros_por_bulto. Los productos sin catálogo (~9% del volumen:
 // merchandising, vinos de reventa, etc.) no se cuentan.
+// Mínimo de cajas de producto propio para que el $/caja y $/litro de una zona se
+// consideren confiables. Por debajo se muestran "s/d" y no entran en los gráficos.
+const MIN_CAJAS_EFIC = 10;
+
 // Resuelve cualquier nombre de pedido_productos a su {bulto, litros} (litros = por
 // bulto). Regla de negocio: el gin propio (Nativo / Alta Montaña / Refugios) va en
 // cajas de 4 si es 500ml y de 6 si es 750ml, sin importar la variante. Captura así
@@ -1308,25 +1312,32 @@ function renderEficienciaRegion(){
     pct:d.pctN?d.pctSum/d.pctN:0,
     costoCaja:d.cajas?d.gastoComp/d.cajas:0,
     costoLitro:d.litros?d.gastoComp/d.litros:0,
+    cajasTot:d.cajas,
     gasto:d.gasto
   })).sort((a,b)=>b.gasto-a.gasto);
+
+  // Zonas con muy pocas cajas de producto propio dan un $/caja y $/litro poco
+  // confiables (denominador chico): se marcan "s/d" y se sacan de los gráficos.
+  const confiable=r=>r.cajasTot>=MIN_CAJAS_EFIC;
+  const sd='<span style="color:var(--text3)" title="Datos insuficientes: muy pocas cajas de producto propio en esta zona">s/d</span>';
 
   const tb=document.getElementById('eficiencia-region-tbody');
   if(tb) tb.innerHTML=arr.map(r=>{
     const badge=r.pct<8?'green':r.pct<15?'amber':'red';
+    const ok=confiable(r);
     return `<tr><td>${r.name}</td><td class="num-right">${r.pedidos}</td>
       <td class="num-right">${r.cajasPed.toFixed(1)}</td>
       <td class="num-right"><span class="badge ${badge}">${r.pct.toFixed(1)}%</span></td>
-      <td class="num-right">${peso(r.costoCaja)}</td>
-      <td class="num-right">${peso(r.costoLitro)}</td>
+      <td class="num-right">${ok?peso(r.costoCaja):sd}</td>
+      <td class="num-right">${ok?peso(r.costoLitro):sd}</td>
       <td class="num-right">${peso(r.gasto)}</td></tr>`;
   }).join('');
 
-  const byCaja=[...arr].filter(r=>r.costoCaja>0).sort((a,b)=>b.costoCaja-a.costoCaja);
+  const byCaja=[...arr].filter(r=>r.costoCaja>0&&confiable(r)).sort((a,b)=>b.costoCaja-a.costoCaja);
   mkChart('c-costo-caja',{type:'bar',data:{labels:byCaja.map(r=>r.name),
     datasets:[{data:byCaja.map(r=>Math.round(r.costoCaja)),backgroundColor:COLORS.teal,borderRadius:4,borderSkipped:false}]},
     options:barOptsPeso()});
-  const byLitro=[...arr].filter(r=>r.costoLitro>0).sort((a,b)=>b.costoLitro-a.costoLitro);
+  const byLitro=[...arr].filter(r=>r.costoLitro>0&&confiable(r)).sort((a,b)=>b.costoLitro-a.costoLitro);
   mkChart('c-costo-litro',{type:'bar',data:{labels:byLitro.map(r=>r.name),
     datasets:[{data:byLitro.map(r=>Math.round(r.costoLitro)),backgroundColor:COLORS.purple,borderRadius:4,borderSkipped:false}]},
     options:barOptsPeso()});
