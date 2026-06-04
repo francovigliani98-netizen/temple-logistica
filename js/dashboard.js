@@ -799,12 +799,6 @@ function renderChartsCostos(){
     const wrap=document.getElementById('c-mix-productos-wrap');
     if(wrap) wrap.style.display='none';
   }
-  // Acumulado
-  const mesMap={};rows.forEach(r=>{if(r.mes)mesMap[r.mes]=(mesMap[r.mes]||0)+(r.total||0);});
-  const mL=sortMeses(Object.keys(mesMap));let acc=0;
-  mkChart('c-acumulado',{type:'line',data:{labels:mL,datasets:[{data:mL.map(m=>{acc+=mesMap[m]||0;return Math.round(acc);}),borderColor:COLORS.navy,backgroundColor:'rgba(30,58,95,0.08)',fill:true,tension:0.2,pointRadius:5,pointBackgroundColor:COLORS.navy}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'$'+Math.round(c.raw).toLocaleString('es-AR')}}},
-      scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:11}}},y:{grid:{color:gridC},ticks:{color:textC,font:{size:11},callback:v=>'$'+Math.round(v/1000)+'k'}}}}});
   // Zona: volumen + costo promedio
   const zonaData={};
   rows.forEach(r=>{if(!r.region)return;if(!zonaData[r.region])zonaData[r.region]={pedidos:0,totalCosto:0};zonaData[r.region].pedidos++;zonaData[r.region].totalCosto+=(r.total||0);});
@@ -1375,29 +1369,6 @@ function renderAnalisisProducto(){
       plugins:{legend:{display:false},tooltip:{callbacks:{title:c=>prodArr[c[0].dataIndex].name,label:c=>`% logístico: ${c.raw}%`}}},
       scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:10},callback:v=>v+'%'}},y:{grid:{display:false},ticks:{color:textC,font:{size:11}}}}}});
 
-  // Co-ocurrencia: pares de productos en un mismo pedido
-  const pairCount={}, prodOrders={};
-  Object.values(pidProds).forEach(prods=>{
-    const list=Object.keys(prods);
-    list.forEach(p=>{ prodOrders[p]=(prodOrders[p]||0)+1; });
-    for(let i=0;i<list.length;i++) for(let j=i+1;j<list.length;j++){
-      const key=[list[i],list[j]].sort().join(' ││ ');
-      pairCount[key]=(pairCount[key]||0)+1;
-    }
-  });
-  const pairs=Object.entries(pairCount).map(([key,n])=>{
-    const [a,b]=key.split(' ││ ');
-    const union=(prodOrders[a]||0)+(prodOrders[b]||0)-n; // pedidos con al menos uno
-    return {a,b,n,pct:union?n/union*100:0};
-  }).sort((x,y)=>y.n-x.n).slice(0,10);
-  const cb=document.getElementById('cooc-tbody');
-  const shrt=s=>s.length>20?s.slice(0,18)+'…':s;
-  if(cb) cb.innerHTML=pairs.length?pairs.map(p=>`<tr>
-      <td title="${p.a} + ${p.b}"><span style="font-weight:500">${shrt(p.a)}</span> <span style="color:var(--text3)">+</span> <span style="font-weight:500">${shrt(p.b)}</span></td>
-      <td class="num-right">${p.n}</td>
-      <td class="num-right"><span class="badge ${p.pct>=50?'green':p.pct>=25?'amber':''}">${p.pct.toFixed(0)}%</span></td>
-    </tr>`).join('')
-    :'<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text3)">Sin combinaciones en el período</td></tr>';
 }
 
 // ---- #7: scorecard de cumplimiento por región y por cliente ----

@@ -182,8 +182,7 @@ th[data-sort]:hover{background:var(--border2)}
       <div class="chart-card"><h3>% logístico según cantidad de cajas por pedido</h3><div class="chart-sub">Pedidos chicos son proporcionalmente mucho más caros · Consolidar cajas en un mismo envío baja el % logístico</div><div class="chart-wrap tall"><canvas id="c-cajas"></canvas></div></div>
     </div>
     <div class="divider"></div>
-    <div class="charts-row charts-2">
-      <div class="chart-card"><h3>Gasto logístico acumulado en el año</h3><div class="chart-sub">Suma mensual del gasto total en flete · Útil para proyectar el cierre del año y comparar contra presupuesto</div><div class="chart-wrap tall"><canvas id="c-acumulado"></canvas></div></div>
+    <div class="charts-row">
       <div class="chart-card">
         <h3>Cantidad de envíos y costo promedio por zona</h3>
         <div class="chart-sub">Barras: cuántos pedidos se despachan a cada zona · Línea: cuánto cuesta en promedio cada uno · Zonas con pocos envíos pero costo alto merecen atención</div>
@@ -212,15 +211,10 @@ th[data-sort]:hover{background:var(--border2)}
     <div class="divider"></div>
     <div class="section-header">
       <h2>¿Qué productos arrastran el costo logístico?</h2>
-      <span class="desc">El % logístico promedio atribuible a cada producto (ponderado por su peso en cajas dentro de cada pedido) y qué productos suelen viajar juntos en un mismo envío — útil para impulsar combos que consoliden carga y mejoren la eficiencia.</span>
+      <span class="desc">El % logístico promedio atribuible a cada producto, ponderado por su peso en cajas dentro de cada pedido. Más alto = ese producto suele viajar en envíos proporcionalmente más caros.</span>
     </div>
-    <div class="charts-row charts-2">
+    <div class="charts-row">
       <div class="chart-card"><h3>% logístico promedio por producto</h3><div class="chart-sub">Atribuye a cada producto el % logístico de los pedidos donde aparece, según su proporción de cajas · Más alto = viaja en envíos proporcionalmente más caros</div><div class="chart-wrap tall"><canvas id="c-pct-producto"></canvas></div></div>
-      <div class="chart-card">
-        <h3>Productos que viajan juntos</h3>
-        <div class="chart-sub">Combinaciones que más aparecen en un mismo pedido · "% de sus pedidos" = cuántos de los pedidos que contienen a alguno de los dos los llevan juntos</div>
-        <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Combinación</th><th class="num-right">Pedidos juntos</th><th class="num-right">% de sus pedidos</th></tr></thead><tbody id="cooc-tbody"></tbody></table></div>
-      </div>
     </div>
   </div>
 
