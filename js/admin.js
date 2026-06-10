@@ -103,7 +103,7 @@ function normalizarProducto(nombre) {
   if (!nombre) return null;
   const n = nombre.toUpperCase();
   if (n.includes('CERVEZA')||n.includes('IPA')||n.includes('STOUT')||n.includes('PORTER')||n.includes('ALE')||n.includes('LAGER')||n.includes('RUBIA')||n.includes('NEGRA')) return 'Cerveza';
-  if (n.includes('ALTA MONTA')) return 'Alta Montaña 750ml';
+  if (n.includes('ALTA MONTA')) return n.includes('750') ? 'Alta Montaña 750ml' : 'Alta Montaña 500ml'; // a los bares Temple va el 500
   if (n.includes('GIN')&&n.includes('500')) return 'Gin 500ml';
   if (n.includes('GIN')&&n.includes('750')) return 'Gin 750ml';
   if (n.includes('GIN')) return 'Gin 500ml'; // default gin
@@ -154,9 +154,16 @@ function processToRows(factData, pedData) {
 
   // Construir rows de pedidos (igual que antes)
   const rows = [];
+  let sinReporte = 0;
   for (const f of factData) {
     const pid = String(getCol(f,"Pedido","pedido","PEDIDO"));
-    const p = pedMap[pid]||{};
+    if (!pid) continue;
+    // BLINDAJE anti-borrado: si la Facturación trae un pedido que NO está en el
+    // Reporte de Pedidos (carga parcial / archivos de distinto período), lo salteamos.
+    // Así el upsert NO pisa con blancos el valor declarado / razón social / productos
+    // que ya están guardados en la base para ese pedido.
+    if (!pedMap[pid]) { sinReporte++; continue; }
+    const p = pedMap[pid];
     const cajas = parseInt(getCol(f,"CAJAS","cajas","Cajas")||0)||0;
     const pallets = parseFloat(getCol(f,"Pallets","pallets","PALLETS")||0)||0;
     const total = parseFloat(String(getCol(f,"TOTAL A FACTURAR","Total a Facturar","TOTAL","total")||0).replace(/[^0-9.-]/g,""))||0;
@@ -200,7 +207,7 @@ function processToRows(factData, pedData) {
   // Limpiar _mes antes de devolver
   rows.forEach(r => delete r._mes);
 
-  return { rows, ppRows };
+  return { rows, ppRows, sinReporte };
 }
 
 // ---- UPLOAD TO SUPABASE ----
@@ -212,9 +219,12 @@ async function uploadData() {
   setProgress(10);
 
   try {
-    const { rows, ppRows } = processToRows(factRaw, pedRaw);
+    const { rows, ppRows, sinReporte } = processToRows(factRaw, pedRaw);
     setProgress(25);
-    setStatus('info',`${rows.length} pedidos · ${ppRows.length} líneas de producto. Subiendo...`);
+    const avisoParcial = sinReporte > 0
+      ? ` · ⚠️ ${sinReporte} pedido(s) de la Facturación NO están en el Reporte de Pedidos: se saltean para no borrar sus datos. Si esperabas que entraran, subí el Reporte completo del mismo período.`
+      : '';
+    setStatus('info',`${rows.length} pedidos · ${ppRows.length} líneas de producto. Subiendo...${avisoParcial}`);
 
     const { data: existing } = await supabaseClient.from('pedidos').select('pid');
     const existingPids = new Set((existing||[]).map(r=>r.pid));
@@ -274,7 +284,7 @@ async function uploadData() {
     );
 
     setProgress(100);
-    setStatus('success',`✓ Listo. ${newRows.length} pedidos nuevos, ${updateRows.length} actualizados, ${ppRows.length} líneas de producto guardadas.`);
+    setStatus('success',`✓ Listo. ${newRows.length} pedidos nuevos, ${updateRows.length} actualizados, ${ppRows.length} líneas de producto guardadas.${sinReporte>0?` (${sinReporte} salteados por no estar en el Reporte de Pedidos — datos previos intactos.)`:''}`);
 
     factRaw=null; pedRaw=null;
     document.getElementById('fact-name').textContent='Ningún archivo seleccionado';

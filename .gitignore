@@ -1,0 +1,7 @@
+# Servidor de preview local (temporal)
+.preview-server.ps1
+
+# Archivos de datos / exports (no van al repo público)
+*.xlsx
+*.xls
+*.csv

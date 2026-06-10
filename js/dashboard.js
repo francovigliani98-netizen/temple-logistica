@@ -20,14 +20,16 @@ let TARIFF = {
   'Santa Cruz y TDF':       [42517,26378,21188,11028,9611,8875,null,null],
 };
 
-// litros = litros por BULTO (de la tabla precios) · bulto = unidades por bulto
-// (necesario porque pedido_productos.cantidad viene en UNIDADES, no en cajas)
+// bulto = unidades por caja (definido por el negocio; ej. gin 750 = 6, no lo que diga el catálogo).
+// price = valor por caja; es solo FALLBACK: en runtime lo sobreescribe aplicarPreciosCatalogo()
+// con el precio de lista_precios (catálogo = fuente de verdad). litros/margen vienen de `precios`.
 let PRODUCTS = {
-  'Cerveza':            { price: 13821,  margen: 0.35, litros: 7, bulto: 24, key: 'sim-qty-cerveza' },
-  'Vermú 750ml':        { price: 52290,  margen: 0.50, litros: 9, bulto: 6,  key: 'sim-qty-vermu' },
-  'Gin 500ml':          { price: 54390,  margen: 0.55, litros: 6, bulto: 4,  key: 'sim-qty-gin500' },
-  'Gin 750ml':          { price: 81585,  margen: 0.55, litros: 9, bulto: 6,  key: 'sim-qty-gin750' },
-  'Alta Montaña 750ml': { price: 122378, margen: 0.60, litros: 9, bulto: 6,  key: 'sim-qty-alta' },
+  'Cerveza':            { price: 108000, margen: 0.35, litros: 7, bulto: 24, key: 'sim-qty-cerveza' }, // 4.500 x24
+  'Vermú 750ml':        { price: 104580, margen: 0.50, litros: 9, bulto: 6,  key: 'sim-qty-vermu' },   // 17.430 x6
+  'Gin 500ml':          { price: 88000,  margen: 0.55, litros: 6, bulto: 4,  key: 'sim-qty-gin500' },  // 22.000 x4
+  'Gin 750ml':          { price: 244758, margen: 0.55, litros: 9, bulto: 6,  key: 'sim-qty-gin750' },  // 40.793 x6
+  'Alta Montaña 500ml': { price: 114400, margen: 0.60, litros: 2, bulto: 4,  key: 'sim-qty-alta500' }, // 28.600 x4
+  'Alta Montaña 750ml': { price: 367134, margen: 0.60, litros: 9, bulto: 6,  key: 'sim-qty-alta' },    // 61.189 x6
 };
 
 let allRows = [], filteredRows = [], charts = {};
@@ -120,6 +122,7 @@ async function loadData(){
     try{ await withTimeout(loadPrices(),5000); }catch(e){ console.warn('loadPrices timeout',e); }
     try{ await withTimeout(loadTarifario(),5000); }catch(e){ console.warn('loadTarifario timeout',e); }
     try{ await withTimeout(loadListaPrecios(),5000); }catch(e){ console.warn('loadListaPrecios timeout',e); }
+    aplicarPreciosCatalogo(); // precios por caja desde el catálogo (lista_precios = fuente de verdad)
 
     const{data,error}=await withTimeout(
       supabaseClient.from('pedidos').select('*').order('fecha',{ascending:true}).limit(2000),
@@ -151,7 +154,9 @@ async function loadPrices(){
     if(data&&data.length){
       data.forEach(p=>{
         if(PRODUCTS[p.producto]){
-          PRODUCTS[p.producto].price=p.precio;
+          // El PRECIO ya no sale de la tabla `precios` — sale de lista_precios
+          // (catálogo, fuente de verdad) vía aplicarPreciosCatalogo(). Acá solo
+          // margen y litros, que no están en el catálogo.
           if(p.margen!=null)PRODUCTS[p.producto].margen=parseFloat(p.margen);
           if(p.litros_caja!=null)PRODUCTS[p.producto].litros=parseFloat(p.litros_caja);
         }
@@ -204,6 +209,29 @@ async function loadListaPrecios(){
     if(error||!data){ listaPrecios=[]; return; }
     listaPrecios=data;
   }catch(e){ listaPrecios=[]; }
+}
+
+// Categoría del mix → SKU representativo del catálogo (lista_precios = fuente de verdad
+// de PRECIOS). El bulto lo define el negocio en PRODUCTS (ej. gin 750 = 6), no el catálogo.
+const PRODUCTO_SKU = {
+  'Gin 500ml':          100001, // GIN BOSQUE NATIVO 500 ML
+  'Gin 750ml':          100014, // GIN BOSQUE NATIVO 750 ML
+  'Alta Montaña 500ml': 100002, // GIN BOSQUE ALTA MONTAÑA 500 ML
+  'Alta Montaña 750ml': 100015, // GIN BOSQUE ALTA MONTAÑA 750 ML
+  'Vermú 750ml':        100004, // FERIADO ROJO VERMÚ 750 ML
+  'Cerveza':            110030, // CERVEZA TEMPLE WOLF IPA 473 ML (la más vendida)
+};
+
+// Sobreescribe el precio por caja de cada categoría con el del catálogo (precio_unitario
+// × bulto del negocio). Si el catálogo no está cargado o falta el SKU, queda el hardcode.
+function aplicarPreciosCatalogo(){
+  if(!listaPrecios||!listaPrecios.length) return;
+  const bySku={}; listaPrecios.forEach(p=>{ bySku[String(p.sku)]=p; });
+  for(const [cat,sku] of Object.entries(PRODUCTO_SKU)){
+    const row=bySku[String(sku)]; if(!row||!PRODUCTS[cat]) continue;
+    const pu=parseFloat(row.precio_unidad); if(!pu) continue;
+    PRODUCTS[cat].price = pu * PRODUCTS[cat].bulto; // valor por caja = unitario del catálogo × bultos
+  }
 }
 
 // ---- SIMULADOR CON FILAS DINÁMICAS ----
@@ -920,10 +948,21 @@ function renderComparador(){
 }
 
 let frecTargetInterval = 10;
+let frecSortBy = 'pct'; // 'pct' (% actual) | 'ahorro' ($) | 'mejora' (puntos que baja)
 
 function setFrecInterval(days, btn) {
   frecTargetInterval = days;
   document.querySelectorAll('.frec-btn').forEach(b => {
+    b.style.background = 'var(--surface)'; b.style.color = 'var(--text2)';
+    b.style.borderColor = 'var(--border2)'; b.style.fontWeight = '';
+  });
+  if (btn) { btn.style.background = 'var(--blue)'; btn.style.color = '#fff'; btn.style.borderColor = 'var(--blue)'; btn.style.fontWeight = '600'; }
+  renderChartsClientes();
+}
+
+function setFrecSort(by, btn) {
+  frecSortBy = by;
+  document.querySelectorAll('.frec-sort-btn').forEach(b => {
     b.style.background = 'var(--surface)'; b.style.color = 'var(--text2)';
     b.style.borderColor = 'var(--border2)'; b.style.fontWeight = '';
   });
@@ -1016,32 +1055,65 @@ function renderChartsClientes(){
     return s.trim().split(' ').slice(0,2).join(' ');
   }
 
-  // Construir datos por cliente con info de región, valor declarado y productos
+  // Cajas reales reconstruidas desde la composición de cada pedido (unidades/bulto),
+  // porque el campo `cajas` está sucio (muchos pedidos figuran en 1).
+  const compMap = pidCajasLitrosMap(); // { pid: {cajas, litros} }
+
+  // Composición por pedido y producto: cajas reconstruidas + valor de lista (catálogo),
+  // para mostrar el peso en VOLUMEN (cajas) vs el peso en VALOR de cada producto.
+  const compDetMap = {};
+  mixData.forEach(r => {
+    const p = resolverBultoLitros(r.producto); if (!p || !p.bulto) return;
+    const q = parseFloat(r.cantidad) || 0; if (q <= 0) return;
+    const cajas = q / p.bulto;
+    if (!compDetMap[r.pid]) compDetMap[r.pid] = {};
+    const m = compDetMap[r.pid];
+    if (!m[r.producto]) m[r.producto] = { cajas: 0, valorList: 0 };
+    m[r.producto].cajas    += cajas;
+    m[r.producto].valorList += (p.price || 0) * cajas;
+  });
+
+  // Construir datos por cliente. El análisis de consolidación se hace SOLO sobre los
+  // pedidos con composición de producto propio conocida, para que cajas, valor
+  // declarado y flete provengan del mismo subconjunto (numerador y denominador consistentes).
   const clienteFrecMap = {};
   rows.forEach(r => {
     const k = r.razon_social || r.dest || 'Desconocido';
-    if (!clienteFrecMap[k]) clienteFrecMap[k] = { pedidos: 0, totalCajas: 0, totalFlete: 0, totalValDecl: 0, pctLogs: [], region: r.region || '', pallets: 0, prods: {}, fechas: [] };
+    if (!clienteFrecMap[k]) clienteFrecMap[k] = { pedidosTot: 0, pedComp: 0, cajasReal: 0, fleteComp: 0, valDeclComp: 0, region: r.region || '', prods: {}, ordenes: [] };
     const d = clienteFrecMap[k];
-    d.pedidos++;
-    d.totalCajas  += (r.cajas    || 0);
-    d.totalFlete  += (r.total    || 0);
-    d.totalValDecl+= (r.val_decl || 0);
-    d.pallets     += (r.pallets  || 0);
-    if (r.pct_log != null) d.pctLogs.push(r.pct_log);
+    d.pedidosTot++;
     if (!d.region && r.region) d.region = r.region;
-    if (r.fecha) d.fechas.push(r.fecha);
     if (r.productos) r.productos.split(',').forEach(p => {
       const n = normProd(p); if (n) d.prods[n] = (d.prods[n] || 0) + 1;
     });
+    const comp = compMap[r.pid];
+    const cajasReal = comp && comp.cajas > 0 ? comp.cajas : 0;
+    if (cajasReal > 0 && (r.val_decl || 0) > 0) {
+      d.pedComp++;
+      d.cajasReal   += cajasReal;
+      d.fleteComp   += (r.total    || 0);
+      d.valDeclComp += (r.val_decl || 0);
+      d.ordenes.push({ fecha: r.fecha || '', cajas: cajasReal, flete: r.total || 0, pct: (r.pct_log != null ? r.pct_log : null), valDecl: r.val_decl || 0, comp: compDetMap[r.pid] || {} });
+    }
   });
 
-  // Encuentra el mínimo de cajas para llegar a zona verde (<8%) o amarilla (<15%)
-  function cajasMinimas(region, avgValDeclPorCaja, metaPct) {
-    if (!avgValDeclPorCaja || !region) return null;
-    for (let cajas = 1; cajas <= 100; cajas++) {
-      const flete = calcFlete(region, cajas, 0);
+  // Flete por cantidad de cajas. Topea en la tarifa 21-30 por caja para >30 cajas
+  // (no salta al precio fijo de pallet, que dispararía el flete de pedidos grandes).
+  function fleteCajasSim(region, cajas) {
+    const t = TARIFF[region]; if (!t) return null;
+    const c = Math.max(1, Math.round(cajas));
+    const idx = c <= 1 ? 0 : c <= 3 ? 1 : c <= 6 ? 2 : c <= 10 ? 3 : c <= 20 ? 4 : 5;
+    const u = t[idx];
+    return u ? u * c : null;
+  }
+
+  // Mínimo de cajas por envío para llegar a zona verde (<8%) o amarilla (<15%)
+  function cajasMinimas(region, valDeclPorCaja, metaPct) {
+    if (!valDeclPorCaja || !region) return null;
+    for (let cajas = 1; cajas <= 200; cajas++) {
+      const flete = fleteCajasSim(region, cajas);
       if (flete == null) continue;
-      if (flete / (avgValDeclPorCaja * cajas) < metaPct) return cajas;
+      if (flete / (valDeclPorCaja * cajas) < metaPct) return cajas;
     }
     return null;
   }
@@ -1049,20 +1121,20 @@ function renderChartsClientes(){
   const targetInterval = frecTargetInterval || 10;
 
 
-  const simClientes = Object.entries(clienteFrecMap)
-    .filter(([, d]) => d.pedidos >= 2 && d.totalValDecl > 0 && d.totalCajas > 0 && d.region)
+  const simClientesAll = Object.entries(clienteFrecMap)
+    .filter(([, d]) => d.pedComp >= 2 && d.valDeclComp > 0 && d.cajasReal > 0 && d.region)
     .map(([name, d]) => {
-      const avgCajas          = d.totalCajas / d.pedidos;
-      const avgPallet         = d.pallets    / d.pedidos;
-      const avgValDeclPorCaja = d.totalValDecl / d.totalCajas;
-      const currentPct        = d.totalFlete / d.totalValDecl * 100;
+      const avgCajas          = d.cajasReal / d.pedComp;          // cajas que pide normalmente (reconstruidas)
+      const avgValDeclPorCaja = d.valDeclComp / d.cajasReal;
+      const currentPct        = d.fleteComp / d.valDeclComp * 100;
 
-      // Calcular intervalo promedio real desde fechas
+      // Intervalo promedio real entre pedidos (con composición conocida)
+      const fechas = d.ordenes.map(o => o.fecha).filter(Boolean);
       let avgInterval = null, periodDays = null;
-      if (d.fechas.length >= 2) {
-        const sorted = d.fechas.map(f => new Date(f+'T12:00:00')).sort((a,b)=>a-b);
+      if (fechas.length >= 2) {
+        const sorted = fechas.map(f => new Date(f+'T12:00:00')).sort((a,b)=>a-b);
         periodDays = (sorted[sorted.length-1] - sorted[0]) / (1000*60*60*24);
-        avgInterval = periodDays > 0 ? periodDays / (d.fechas.length - 1) : null;
+        avgInterval = periodDays > 0 ? periodDays / (fechas.length - 1) : null;
       }
 
       // Si ya pide con menor frecuencia que el target, no aplica
@@ -1071,34 +1143,107 @@ function renderChartsClientes(){
       let simCajas, simPedidosN, simFleteUnit, simTotalFlete;
       if (avgInterval !== null && periodDays > 0) {
         simPedidosN  = Math.max(1, periodDays / targetInterval);
-        simCajas     = Math.round(d.totalCajas / simPedidosN);
-        const simPallets = d.pallets > 0 ? Math.ceil(d.pallets * (simPedidosN / d.pedidos)) : 0;
-        simFleteUnit = calcFlete(d.region, simCajas, simPallets);
+        simCajas     = Math.max(1, Math.round(d.cajasReal / simPedidosN));
+        simFleteUnit = fleteCajasSim(d.region, simCajas);
         if (simFleteUnit == null) return null;
         simTotalFlete = simFleteUnit * Math.ceil(simPedidosN);
       } else {
-        // Sin fechas: duplicar cajas como proxy conservador
-        simCajas      = Math.round(avgCajas * 2);
-        simPedidosN   = d.pedidos / 2;
-        simFleteUnit  = calcFlete(d.region, simCajas, avgPallet * 2);
+        // Sin fechas suficientes: proxy conservador (duplicar cajas por envío)
+        simCajas      = Math.max(1, Math.round(avgCajas * 2));
+        simPedidosN   = d.pedComp / 2;
+        simFleteUnit  = fleteCajasSim(d.region, simCajas);
         if (simFleteUnit == null) return null;
         simTotalFlete = simFleteUnit * Math.ceil(simPedidosN);
       }
 
-      const simPct  = Math.max(0, simTotalFlete / d.totalValDecl * 100);
-      const ahorro  = d.totalFlete - simTotalFlete;
+      const simPct  = Math.max(0, simTotalFlete / d.valDeclComp * 100);
+      const ahorro  = d.fleteComp - simTotalFlete;
       const mejora  = currentPct - simPct;
 
       const minVerde    = cajasMinimas(d.region, avgValDeclPorCaja, 0.08);
       const minAmarilla = cajasMinimas(d.region, avgValDeclPorCaja, 0.15);
 
       const prodDominante = Object.entries(d.prods).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
-      return { name, region: d.region, pedidos: d.pedidos, avgCajas, currentPct, simCajas, simPct, ahorro, mejora, minVerde, minAmarilla, prodDominante, avgInterval };
+      const simPedidos = Math.max(1, Math.ceil(simPedidosN));
+      const ordenes = d.ordenes.slice().sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+
+      // Mix del cliente: cajas vs valor. El valor por producto se estima repartiendo
+      // el valor declarado real de cada pedido según su participación en valor de catálogo.
+      const mixAgg = {};
+      d.ordenes.forEach(o => {
+        const listTot = Object.values(o.comp).reduce((s, v) => s + v.valorList, 0);
+        Object.entries(o.comp).forEach(([prod, v]) => {
+          if (!mixAgg[prod]) mixAgg[prod] = { cajas: 0, valor: 0 };
+          mixAgg[prod].cajas += v.cajas;
+          mixAgg[prod].valor += listTot > 0 ? (v.valorList / listTot) * o.valDecl : 0;
+        });
+      });
+      const mixTotCajas = Object.values(mixAgg).reduce((s, v) => s + v.cajas, 0) || 1;
+      const mixTotValor = Object.values(mixAgg).reduce((s, v) => s + v.valor, 0) || 1;
+      const mix = Object.entries(mixAgg).map(([prod, v]) => ({
+        prod, cajas: v.cajas, valor: v.valor,
+        cajasPct: v.cajas / mixTotCajas * 100,
+        valorPct: v.valor / mixTotValor * 100
+      })).sort((a, b) => b.valorPct - a.valorPct);
+
+      return { name, region: d.region, pedidos: d.pedComp, pedidosTot: d.pedidosTot, cajasReal: d.cajasReal, valDeclComp: d.valDeclComp, fleteComp: d.fleteComp, simFlete: simTotalFlete, avgCajas, currentPct, simCajas, simPct, ahorro, mejora, minVerde, minAmarilla, prodDominante, avgInterval, simPedidos, simFleteUnit, ordenes, mix };
     })
     .filter(Boolean)
-    .filter(c => c.mejora > 0.5)
-    .sort((a, b) => b.ahorro - a.ahorro)
-    .slice(0, 20);
+    .filter(c => c.mejora > 0.5);
+
+  const frecSortFns = {
+    pct:    (a, b) => b.currentPct - a.currentPct,   // más caros de gestionar primero
+    ahorro: (a, b) => b.ahorro - a.ahorro,           // más plata ahorrada
+    mejora: (a, b) => b.mejora - a.mejora,           // más puntos de % que baja
+  };
+  simClientesAll.sort(frecSortFns[frecSortBy] || frecSortFns.pct);
+
+  // ---- RESUMEN POR ZONA ----
+  // Si TODOS los bares de cada región consolidaran al intervalo elegido.
+  const regionAgg = {};
+  simClientesAll.forEach(c => {
+    const r = regionAgg[c.region] || (regionAgg[c.region] = { bares:0, cajasNow:0, ordersNow:0, cajasSim:0, ordersSim:0, fleteComp:0, simFlete:0, valDecl:0, ahorro:0 });
+    r.bares++;
+    r.cajasNow += c.cajasReal;          r.ordersNow += c.pedidos;
+    r.cajasSim += c.simCajas * c.simPedidos; r.ordersSim += c.simPedidos;
+    r.fleteComp += c.fleteComp;         r.simFlete += c.simFlete;
+    r.valDecl  += c.valDeclComp;        r.ahorro   += c.ahorro;
+  });
+  const regionArr = Object.entries(regionAgg).map(([region, r]) => ({
+    region, bares: r.bares,
+    cajasNow: r.ordersNow ? r.cajasNow / r.ordersNow : 0,
+    cajasSim: r.ordersSim ? r.cajasSim / r.ordersSim : 0,
+    pctNow:   r.valDecl   ? r.fleteComp / r.valDecl * 100 : 0,
+    pctSim:   r.valDecl   ? r.simFlete  / r.valDecl * 100 : 0,
+    ahorro:   r.ahorro
+  })).sort((a, b) => b.ahorro - a.ahorro);
+
+  const regionBody = document.getElementById('frec-region-tbody');
+  if (regionBody) {
+    if (regionArr.length) {
+      regionBody.innerHTML = regionArr.map(r => {
+        const nowBadge = r.pctNow < 8 ? 'green' : r.pctNow < 15 ? 'amber' : 'red';
+        const simBadge = r.pctSim < 8 ? 'green' : r.pctSim < 15 ? 'amber' : 'red';
+        return `<tr>
+          <td style="font-weight:500">${r.region}</td>
+          <td class="num-right">${r.bares}</td>
+          <td class="num-right">${r.cajasNow.toFixed(1)} &nbsp;→&nbsp; ${r.cajasSim.toFixed(1)}</td>
+          <td class="num-right" style="white-space:nowrap">
+            <span class="badge ${nowBadge}">${r.pctNow.toFixed(1)}%</span>
+            <span style="color:var(--text3)">→</span>
+            <span class="badge ${simBadge}">${r.pctSim.toFixed(1)}%</span>
+          </td>
+          <td class="num-right"><strong style="color:var(--green-dark)">${peso(r.ahorro)}</strong></td>
+        </tr>`;
+      }).join('');
+    } else {
+      regionBody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--text3)">No hay zonas con bares que pidan más seguido que cada ${targetInterval} días.</td></tr>`;
+    }
+  }
+  const regionWrap = document.getElementById('frec-region-card');
+  if (regionWrap) regionWrap.style.display = regionArr.length ? '' : 'none';
+
+  const simClientes = simClientesAll; // se muestran todos los que califican
 
   // Actualizar header columna comparación
   const thSim = document.getElementById('frec-th-sim');
@@ -1129,15 +1274,102 @@ function renderChartsClientes(){
     return;
   }
 
-  frecuenciaBody.innerHTML = displayClientes.map(c => {
+  frecuenciaBody.innerHTML = displayClientes.map((c, i) => {
     const actBadge = c.currentPct < 8 ? 'green' : c.currentPct < 15 ? 'amber' : 'red';
     const simBadge = c.simPct < 8 ? 'green' : c.simPct < 15 ? 'amber' : 'red';
     const prodColor = c.prodDominante === 'Cerveza' ? 'var(--amber-dark)' : c.prodDominante.includes('Gin') ? 'var(--text2)' : 'var(--green-dark)';
     const intervaloText = c.avgInterval != null ? `cada ~${Math.round(c.avgInterval)} días` : '';
-    return `<tr>
+    const uid = 'frec' + i;
+
+    // Recomendación de cajas mínimas para salir de rojo
+    const minParts = [];
+    if (c.minVerde)    minParts.push(`<strong>${c.minVerde} cajas</strong> por envío para zona verde (&lt;8%)`);
+    if (c.minAmarilla && c.minAmarilla !== c.minVerde) minParts.push(`<strong>${c.minAmarilla}</strong> para amarilla (&lt;15%)`);
+    const minInfo = minParts.length
+      ? `<div style="font-size:12px;color:var(--text2);margin-top:8px;padding-top:8px;border-top:1px dashed var(--border2)">📦 Necesita ${minParts.join(' · ')} en <strong>${c.region}</strong>.</div>`
+      : '';
+
+    // Composición compacta de un pedido (cajas por producto, mayor primero)
+    const fmtCompLine = comp => Object.entries(comp).sort((a,b)=>b[1].cajas-a[1].cajas)
+      .map(([prod,v]) => `${prod} ${v.cajas.toFixed(1)}`).join(' · ');
+
+    // Detalle de pedidos reales del período (con su composición)
+    const ordenesRows = c.ordenes.map(o => {
+      const compLine = fmtCompLine(o.comp);
+      return `<tr>
+        <td style="padding:4px 0;color:var(--text2)">${o.fecha ? fmtD(o.fecha) : '—'}${compLine ? `<div style="font-size:10px;color:var(--text3);max-width:340px">${compLine}</div>` : ''}</td>
+        <td style="padding:4px 0;text-align:right;color:var(--text2);vertical-align:top">${o.cajas ? o.cajas.toFixed(1) : '—'}</td>
+        <td style="padding:4px 0;text-align:right;color:var(--text2);vertical-align:top">${peso(o.flete)}</td>
+        <td style="padding:4px 0;text-align:right;vertical-align:top"><span class="badge ${o.pct==null?'':o.pct<8?'green':o.pct<15?'amber':'red'}" style="font-size:10px">${o.pct!=null?o.pct.toFixed(1)+'%':'—'}</span></td>
+      </tr>`;
+    }).join('');
+
+    // Mix del cliente: peso en cajas vs peso en valor por producto
+    const mixRows = c.mix.map(m => {
+      const gap = m.cajasPct - m.valorPct;
+      const flag = gap > 12 ? ' · <span style="color:var(--amber-dark)">mucho volumen, poco valor</span>' : '';
+      return `<div style="margin-bottom:7px">
+        <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--text2)">
+          <span style="font-weight:500">${m.prod}</span>
+          <span style="color:var(--text3);font-size:11px;white-space:nowrap">${m.cajasPct.toFixed(0)}% cajas · ${m.valorPct.toFixed(0)}% valor${flag}</span>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:3px">
+          <div style="flex:1;height:5px;background:var(--surface);border-radius:3px;overflow:hidden" title="Participación en cajas"><div style="height:100%;width:${Math.min(100,m.cajasPct)}%;background:#14b8a6"></div></div>
+          <div style="flex:1;height:5px;background:var(--surface);border-radius:3px;overflow:hidden" title="Participación en valor"><div style="height:100%;width:${Math.min(100,m.valorPct)}%;background:#8b5cf6"></div></div>
+        </div>
+      </div>`;
+    }).join('');
+
+    const heavy = c.mix.slice().sort((a,b)=>(b.cajasPct-b.valorPct)-(a.cajasPct-a.valorPct))[0];
+    const takeaway = heavy && (heavy.cajasPct - heavy.valorPct) > 12
+      ? `<div style="font-size:12px;color:var(--text2);margin-top:10px;padding:8px 10px;background:var(--amber-light,#fef3c7);border-radius:6px;line-height:1.45">💡 <strong>${heavy.prod}</strong> es el ${heavy.cajasPct.toFixed(0)}% de las cajas pero solo el ${heavy.valorPct.toFixed(0)}% del valor. Consolidar sumando ${heavy.prod.toLowerCase()} agrega flete sin mover mucho el % logístico; conviene que el envío más grande sume producto de mayor valor.</div>`
+      : '';
+
+    const mixBlock = c.mix.length ? `<div style="flex:1;min-width:240px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px">Qué lleva — cajas vs valor</div>
+      <div style="display:flex;gap:12px;font-size:10px;color:var(--text3);margin-bottom:8px">
+        <span><span style="display:inline-block;width:8px;height:8px;background:#14b8a6;border-radius:2px;margin-right:3px"></span>% en cajas</span>
+        <span><span style="display:inline-block;width:8px;height:8px;background:#8b5cf6;border-radius:2px;margin-right:3px"></span>% en valor</span>
+      </div>
+      ${mixRows}
+      ${takeaway}
+    </div>` : '';
+
+    const detalle = `<tr id="det-${uid}" style="display:none;background:var(--surface2)">
+      <td colspan="4" style="padding:14px 18px">
+        <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+          <div style="flex:1;min-width:240px">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px">Plan sugerido</div>
+            <div style="font-size:13px;color:var(--text);line-height:1.5">
+              Pasar de <strong>${c.pedidos} pedidos</strong>${intervaloText ? ` (${intervaloText})` : ''} a
+              <strong>${c.simPedidos} envío${c.simPedidos>1?'s':''}</strong> de <strong>~${c.simCajas} cajas</strong> cada <strong>${targetInterval} días</strong>.
+            </div>
+            <div style="font-size:12px;color:var(--text3);margin-top:6px">
+              Flete por envío estimado: <strong>${peso(c.simFleteUnit)}</strong> · % logístico: ${c.currentPct.toFixed(1)}% → <strong style="color:var(--green-dark)">${c.simPct.toFixed(1)}%</strong> · ahorro en el período: <strong style="color:var(--green-dark)">${peso(c.ahorro)}</strong>
+            </div>
+            ${minInfo}
+          </div>
+          ${mixBlock}
+        </div>
+        <div style="margin-top:16px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px">Pedidos del período ${c.pedidosTot > c.pedidos ? `(${c.pedidos} de ${c.pedidosTot} con composición conocida)` : `(${c.ordenes.length})`}</div>
+          <table style="width:100%;font-size:12px;border-collapse:collapse">
+            <thead><tr style="color:var(--text3);border-bottom:1px solid var(--border2)">
+              <th style="text-align:left;font-weight:500;padding-bottom:4px">Fecha y composición</th>
+              <th style="text-align:right;font-weight:500;padding-bottom:4px">Cajas</th>
+              <th style="text-align:right;font-weight:500;padding-bottom:4px">Flete</th>
+              <th style="text-align:right;font-weight:500;padding-bottom:4px">% log.</th>
+            </tr></thead>
+            <tbody>${ordenesRows}</tbody>
+          </table>
+        </div>
+      </td>
+    </tr>`;
+
+    return `<tr style="cursor:pointer" onclick="togglePedidoDetail('${uid}')">
       <td style="white-space:normal;min-width:140px">
-        <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px" title="${c.name}">${c.name}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${c.region} · <span style="color:${prodColor};font-weight:600">${c.prodDominante}</span></div>
+        <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px" title="${c.name}"><span id="ico-${uid}" style="color:var(--text3);margin-right:5px;display:inline-block;width:8px">▸</span>${c.name}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;padding-left:13px">${c.region} · <span style="color:${prodColor};font-weight:600">${c.prodDominante}</span></div>
       </td>
       <td class="num-right">
         <span style="font-weight:600">${c.pedidos} pedidos</span><br>
@@ -1155,7 +1387,7 @@ function renderChartsClientes(){
         <strong style="color:var(--green-dark);font-size:14px">${peso(c.ahorro)}</strong><br>
         <span style="font-size:10px;color:var(--text3)">−${c.mejora.toFixed(1)} pp</span>
       </td>
-    </tr>`;
+    </tr>${detalle}`;
   }).join('');
 }
 

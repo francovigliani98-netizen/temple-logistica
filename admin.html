@@ -277,24 +277,28 @@ function loadListaAdmin(input) {
   reader.onload = function(e) {
     try {
       const wb = XLSX.read(e.target.result, { type: 'array' });
-      // Buscar hoja con datos base (la que tiene SKU numérico y precio numérico)
-      let ws = wb.Sheets['Hoja 1'] || wb.Sheets['Hoja1'] || wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 
-      // Encontrar fila header
-      let headerRow = -1;
-      for (let i = 0; i < rows.length; i++) {
-        const r = rows[i];
-        if (r && r.some(c => typeof c === 'string' && c.toUpperCase().includes('SKU'))) {
-          headerRow = i; break;
-        }
+      // Una fila es encabezado si tiene una celda con "SKU" o "CODIGO/CÓDIGO".
+      const esHeader = r => r && r.some(c => typeof c === 'string' &&
+        (c.toUpperCase().includes('SKU') || c.toUpperCase().includes('CODIGO') || c.toUpperCase().includes('CÓDIGO')));
+
+      // Elegir la PRIMERA hoja (en orden del archivo) con un encabezado válido.
+      // Antes se priorizaba la hoja llamada "Hoja 1" (con espacio), que en este archivo
+      // es una copia vieja; la hoja que el usuario edita es "Hoja1" (sin espacio) y usa
+      // "CODIGO" en vez de "SKU".
+      let ws = null, rows = null, headerRow = -1;
+      for (const name of wb.SheetNames) {
+        const cand = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: null });
+        const hr = cand.findIndex(esHeader);
+        if (hr >= 0) { ws = wb.Sheets[name]; rows = cand; headerRow = hr; break; }
       }
-      if (headerRow < 0) throw new Error('No se encontró columna SKU');
+      if (!ws || headerRow < 0) throw new Error('No se encontró una hoja con columna SKU/CODIGO');
 
       const headers = rows[headerRow].map(h => (h||'').toString().toUpperCase().trim());
-      const iSku  = headers.findIndex(h => h.includes('SKU'));
+      const iSku  = headers.findIndex(h => h.includes('SKU') || h.includes('CODIGO') || h.includes('CÓDIGO'));
       const iDesc = headers.findIndex(h => h.includes('DESCRIPCION') || h.includes('DESCRIPCIÓN'));
-      const iUni  = headers.findIndex(h => h.includes('UNIDAD') || h.includes('UNI'));
+      // unidades por bulto: columna con "UNIDAD"/"UNI" que NO sea de precio (PTC/PRECIO)
+      const iUni  = headers.findIndex(h => (h.includes('UNIDAD') || h.includes('UNI')) && !h.includes('PTC') && !h.includes('PRECIO'));
       const iPtc  = headers.findIndex(h => h.includes('PTC') && h.includes('UNI'));
       const iTotal= headers.findIndex(h => h.includes('PTC') && (h.includes('TOTAL') || h.includes('BULTO')));
 

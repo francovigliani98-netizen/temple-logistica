@@ -238,12 +238,11 @@ th[data-sort]:hover{background:var(--border2)}
     <div class="divider"></div>
     <div class="section-header">
       <h2>Oportunidad de consolidación de pedidos</h2>
-      <span class="desc">¿Qué pasa si estos clientes piden cada 15 días en lugar de cada semana? Simulamos duplicar las cajas por envío y calculamos el ahorro en flete</span>
+      <span class="desc">Hoy los bares piden todas las semanas (todos los lunes). ¿Qué pasa si piden cada 10, 15, 21 o 30 días? Calculamos cuántas cajas llevaría cada envío y cuánto baja la incidencia logística. Las cajas se reconstruyen desde la composición real del pedido, no del campo "cajas".</span>
     </div>
     <div style="display:flex;align-items:center;gap:14px;padding:14px 20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:16px;flex-wrap:wrap">
       <div style="font-size:13px;color:var(--text2);font-weight:500;flex-shrink:0">Simular pedidos cada:</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="frec-btn" data-days="7"  onclick="setFrecInterval(7,this)"  style="padding:5px 14px;border:1px solid var(--border2);border-radius:20px;font-size:13px;cursor:pointer;background:var(--surface);color:var(--text2)">7 días</button>
         <button class="frec-btn" data-days="10" onclick="setFrecInterval(10,this)" style="padding:5px 14px;border:1px solid var(--blue);border-radius:20px;font-size:13px;cursor:pointer;background:var(--blue);color:#fff;font-weight:600">10 días</button>
         <button class="frec-btn" data-days="15" onclick="setFrecInterval(15,this)" style="padding:5px 14px;border:1px solid var(--border2);border-radius:20px;font-size:13px;cursor:pointer;background:var(--surface);color:var(--text2)">15 días</button>
         <button class="frec-btn" data-days="21" onclick="setFrecInterval(21,this)" style="padding:5px 14px;border:1px solid var(--border2);border-radius:20px;font-size:13px;cursor:pointer;background:var(--surface);color:var(--text2)">21 días</button>
@@ -252,13 +251,37 @@ th[data-sort]:hover{background:var(--border2)}
       <div style="font-size:12px;color:var(--text3)">Solo aparecen bars que hoy piden <em>más seguido</em> que el intervalo elegido</div>
     </div>
     <div id="frec-summary" style="display:none;margin-bottom:12px;padding:14px 20px;background:var(--green-light);border:1px solid #86efac;border-radius:var(--radius-lg);font-size:13px;color:var(--green-dark)"></div>
+    <div class="table-card" id="frec-region-card" style="margin-bottom:20px;display:none">
+      <div class="table-header">
+        <h3>Resumen por zona</h3>
+        <span style="font-size:12px;color:var(--text3)">Si <strong>todos</strong> los bares de cada zona consolidaran al intervalo elegido</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Zona</th>
+            <th class="num-right">Bares a consolidar</th>
+            <th class="num-right">Cajas prom. p/envío<br><span style="font-weight:400;font-size:10px">hoy → simulado</span></th>
+            <th class="num-right">% logístico prom.<br><span style="font-weight:400;font-size:10px">actual → simulado</span></th>
+            <th class="num-right">Ahorro total</th>
+          </tr></thead>
+          <tbody id="frec-region-tbody"></tbody>
+        </table>
+      </div>
+    </div>
     <div class="table-card" style="margin-bottom:32px">
       <div class="table-header">
         <h3>Clientes con mayor potencial de ahorro por consolidación</h3>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span style="font-size:12px;color:var(--text3)">Solo clientes con 2+ pedidos más frecuentes que el intervalo elegido</span>
+          <span style="font-size:12px;color:var(--text3)">Clic en una fila para ver el plan sugerido · todos los clientes con 2+ pedidos más frecuentes que el intervalo</span>
           <input type="text" id="frec-search" placeholder="Buscar cliente..." oninput="renderChartsClientes()" style="font-size:12px;padding:5px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);width:180px;outline:none">
         </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--text2);font-weight:500">Ordenar por:</span>
+        <button class="frec-sort-btn" onclick="setFrecSort('pct',this)" style="padding:4px 12px;border:1px solid var(--blue);border-radius:20px;font-size:12px;cursor:pointer;background:var(--blue);color:#fff;font-weight:600" title="Los más caros de gestionar primero">% logístico actual</button>
+        <button class="frec-sort-btn" onclick="setFrecSort('ahorro',this)" style="padding:4px 12px;border:1px solid var(--border2);border-radius:20px;font-size:12px;cursor:pointer;background:var(--surface);color:var(--text2)" title="Los que más plata ahorran">$ ahorro</button>
+        <button class="frec-sort-btn" onclick="setFrecSort('mejora',this)" style="padding:4px 12px;border:1px solid var(--border2);border-radius:20px;font-size:12px;cursor:pointer;background:var(--surface);color:var(--text2)" title="Los que más bajan su incidencia al consolidar">puntos de % que baja</button>
       </div>
       <div class="table-wrap">
         <table>
@@ -272,7 +295,7 @@ th[data-sort]:hover{background:var(--border2)}
         </table>
       </div>
       <div id="frec-nota" style="margin-top:12px;padding:12px 16px;background:var(--surface2);border-radius:var(--radius);font-size:12px;color:var(--text3)">
-        <strong>Cómo se calcula:</strong> Se toma la fecha del primer y último pedido de cada cliente para calcular su intervalo promedio real. La simulación calcula cuántos pedidos haría en ese mismo período al nuevo ritmo y cuántas cajas promedio llevaría cada uno. El flete se recalcula con la tarifa vigente de Klozer. "Cajas mín. p/verde" es el mínimo para bajar del 8% basado en el valor de mercadería promedio del cliente.
+        <strong>Cómo se calcula:</strong> Las <strong>cajas se reconstruyen desde la composición real</strong> de cada pedido (unidades ÷ bulto), no del campo "cajas" que está sucio. Solo se consideran pedidos con producto propio (gin/cerveza/vermú) para que cajas, valor declarado y flete vengan del mismo subconjunto. Se toma el intervalo promedio real entre pedidos; la simulación calcula cuántos envíos haría al nuevo ritmo y cuántas cajas llevaría cada uno, y recalcula el flete con la tarifa vigente de Klozer. "Cajas mín. p/verde" es el mínimo por envío para bajar del 8% según el valor de mercadería por caja del cliente.
       </div>
     </div>
   </div>
