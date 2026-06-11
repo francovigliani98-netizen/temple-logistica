@@ -348,13 +348,20 @@ function populateFilters(){
   const regs=[...new Set(allRows.map(r=>r.region).filter(Boolean))].sort();
   const fReg=document.getElementById('f-region');
   if(fReg)fReg.innerHTML='<option value="">Todas las regiones</option>'+regs.map(r=>`<option>${r}</option>`).join('');
-  const fechas=allRows.map(r=>r.fecha).filter(Boolean).sort();
-  if(fechas.length){
-    const desde=fmtD(fechas[0]),hasta=fmtD(fechas[fechas.length-1]);
-    document.getElementById('period-chip').textContent=desde===hasta?desde:`${desde} — ${hasta}`;
+}
+
+// Chips del encabezado: reflejan el filtro de mes activo
+function updatePeriodChips(){
+  const periodChip=document.getElementById('period-chip');
+  if(periodChip){
+    const fechas=filteredRows.map(r=>r.fecha).filter(Boolean).sort();
+    if(fechas.length){
+      const desde=fmtD(fechas[0]),hasta=fmtD(fechas[fechas.length-1]);
+      periodChip.textContent=desde===hasta?desde:`${desde} — ${hasta}`;
+    }else periodChip.textContent='—';
   }
   const chip=document.getElementById('total-pedidos-chip');
-  if(chip)chip.textContent=allRows.length+' pedidos';
+  if(chip)chip.textContent=filteredRows.length+' pedidos';
 }
 
 function applyGlobalFilter(){
@@ -364,6 +371,7 @@ function applyGlobalFilter(){
 }
 
 function renderAll(){
+  updatePeriodChips();
   renderKPIs();renderChartsMain();renderChartsCostos();
   renderChartsClientes();renderChartsServicio();renderTable();
   renderComparador();
