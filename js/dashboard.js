@@ -7,17 +7,17 @@
 // ============================================================
 
 let TARIFF = {
-  'Local - CABA':           [7075,4957,3207,3008,2659,2435,140262,109104],
-  'GBA':                    [10613,6881,6132,4932,3762,2996,175329,127287],
-  'Centro (capitales)':     [16176,12026,9568,6731,5877,5347,null,null],
-  'Centro (interior)':      [21368,15521,11789,6998,6415,5873,null,null],
-  'Cuyo (capitales)':       [16176,12026,9568,6731,5877,5347,null,null],
-  'Cuyo (interior)':        [21368,15521,11789,6998,6415,5873,null,null],
-  'NEA/NOA (capitales)':    [16176,12026,9568,6731,5877,5347,null,null],
-  'NEA/NOA (interior)':     [21368,15521,11789,6998,6415,5873,null,null],
-  'Patagonia (capitales)':  [24689,15879,11473,7966,7441,7025,null,null],
-  'Patagonia (interior)':   [29883,21343,15565,9413,8483,7765,null,null],
-  'Santa Cruz y TDF':       [42517,26378,21188,11028,9611,8875,null,null],
+  'Local - CABA':           [8157,5715,3697,3468,3066,2808,161723,125796],
+  'GBA':                    [12236,7933,7071,5686,4337,3455,202154,146762],
+  'Centro (capitales)':     [18651,13866,11031,7760,6776,6165,null,null],
+  'Centro (interior)':      [24638,17896,13593,8069,7397,6771,null,null],
+  'Cuyo (capitales)':       [18651,13866,11031,7760,6776,6165,null,null],
+  'Cuyo (interior)':        [24638,17896,13593,8069,7397,6771,null,null],
+  'NEA/NOA (capitales)':    [18651,13866,11031,7760,6776,6165,null,null],
+  'NEA/NOA (interior)':     [24638,17896,13593,8069,7397,6771,null,null],
+  'Patagonia (capitales)':  [28467,18309,13228,9185,8579,8100,null,null],
+  'Patagonia (interior)':   [34455,24608,17946,10853,9781,8953,null,null],
+  'Santa Cruz y TDF':       [49022,30414,24430,12716,11082,10233,null,null],
 };
 
 // bulto = unidades por caja (definido por el negocio; ej. gin 750 = 6, no lo que diga el catálogo).
