@@ -24,7 +24,10 @@ let TARIFF = {
 // price = valor por caja; es solo FALLBACK: en runtime lo sobreescribe aplicarPreciosCatalogo()
 // con el precio de lista_precios (catálogo = fuente de verdad). litros/margen vienen de `precios`.
 let PRODUCTS = {
-  'Cerveza':            { price: 108000, margen: 0.35, litros: 7, bulto: 24, key: 'sim-qty-cerveza' }, // 4.500 x24
+  // Cerveza se carga en Klozer POR SIX-PACK: la `cantidad` de pedido_productos ya está en
+  // cajas (six-packs), no en botellas → qtyEsCaja=true evita dividir. bulto=6 se usa igual para
+  // el valor por caja (4.500 × 6 = 27.000) y los litros (6 × 473 ml = 2,84 L).
+  'Cerveza':            { price: 27000,  margen: 0.35, litros: 2.84, bulto: 6, qtyEsCaja: true, key: 'sim-qty-cerveza' },
   'Vermú 750ml':        { price: 104580, margen: 0.50, litros: 9, bulto: 6,  key: 'sim-qty-vermu' },   // 17.430 x6
   'Gin 500ml':          { price: 88000,  margen: 0.55, litros: 6, bulto: 4,  key: 'sim-qty-gin500' },  // 22.000 x4
   'Gin 750ml':          { price: 244758, margen: 0.55, litros: 9, bulto: 6,  key: 'sim-qty-gin750' },  // 40.793 x6
@@ -1073,7 +1076,7 @@ function renderChartsClientes(){
   mixData.forEach(r => {
     const p = resolverBultoLitros(r.producto); if (!p || !p.bulto) return;
     const q = parseFloat(r.cantidad) || 0; if (q <= 0) return;
-    const cajas = q / p.bulto;
+    const cajas = p.qtyEsCaja ? q : q / p.bulto; // cerveza ya viene en cajas (six-packs)
     if (!compDetMap[r.pid]) compDetMap[r.pid] = {};
     const m = compDetMap[r.pid];
     if (!m[r.producto]) m[r.producto] = { cajas: 0, valorList: 0 };
@@ -1484,8 +1487,9 @@ function renderChartsServicio(){
 // de productos. NO usa el campo `cajas` de la tabla pedidos (está sucio: muchos
 // pedidos cargados como cajas=1 sin importar el contenido).
 // pedido_productos.cantidad viene en UNIDADES → cajas = unidades / unidades_por_bulto,
-// litros = cajas × litros_por_bulto. Los productos sin catálogo (~9% del volumen:
-// merchandising, vinos de reventa, etc.) no se cuentan.
+// litros = cajas × litros_por_bulto. Excepción: cerveza se carga en Klozer por six-pack,
+// así que su `cantidad` ya está en cajas (qtyEsCaja → no se divide). Los productos sin
+// catálogo (~9% del volumen: merchandising, vinos de reventa, etc.) no se cuentan.
 // Mínimo de cajas de producto propio para que el $/caja y $/litro de una zona se
 // consideren confiables. Por debajo se muestran "s/d" y no entran en los gráficos.
 const MIN_CAJAS_EFIC = 10;
@@ -1513,7 +1517,7 @@ function pidCajasLitrosMap(){
   mixData.forEach(r=>{
     const p=resolverBultoLitros(r.producto); if(!p||!p.bulto) return;
     const q=parseFloat(r.cantidad)||0; if(q<=0) return;
-    const cajas=q/p.bulto;
+    const cajas=p.qtyEsCaja?q:q/p.bulto; // cerveza ya viene en cajas (six-packs)
     if(!acc[r.pid]) acc[r.pid]={cajas:0,litros:0};
     acc[r.pid].cajas+=cajas;
     if(p.litros!=null) acc[r.pid].litros+=cajas*p.litros;
