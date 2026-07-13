@@ -36,6 +36,7 @@ let PRODUCTS = {
 };
 
 let allRows = [], filteredRows = [], charts = {};
+let almacRows = []; // costo de almacenamiento (tabla aparte, no es flete)
 let sortCol = 'fecha', sortDir = 'desc';
 
 // ---- UTILS ----
@@ -137,6 +138,7 @@ async function loadData(){
     allRows=data;
 
     try{ await withTimeout(loadProductosMix(),5000); }catch(e){ console.warn('loadProductosMix timeout',e); mixData=[]; }
+    try{ await withTimeout(loadAlmacenamiento(),5000); }catch(e){ console.warn('loadAlmacenamiento timeout',e); almacRows=[]; }
 
     populateFilters();
     applyGlobalFilter();
@@ -202,6 +204,14 @@ async function loadProductosMix(){
     }
     mixData=todos;
   }catch(e){ mixData=[]; }
+}
+
+// Costo de almacenamiento (tabla aparte: NO se suma al flete)
+async function loadAlmacenamiento(){
+  try{
+    const{data,error}=await supabaseClient.from('almacenamiento').select('*');
+    almacRows = (error||!data) ? [] : data;
+  }catch(e){ almacRows=[]; }
 }
 
 // Lista de precios para el simulador
@@ -417,6 +427,35 @@ function renderKPIs(){
 
   const cpC=m.totalCajas?m.total/m.totalCajas:0;
 
+  // Costo de almacenamiento del período (tabla aparte, no es flete).
+  // Responde solo al filtro de mes: es un cargo fijo mensual, sin región/cliente.
+  const sumAlmac=ms=>almacRows.filter(r=>!ms||r.mes===ms).reduce((s,r)=>s+(parseFloat(r.total)||0),0);
+  const almTotal=sumAlmac(mes);
+  const almPrev=(mes&&mesAnt)?sumAlmac(mesAnt):0;
+  const dAlmac=(mes&&mesAnt&&almPrev)?getDelta(almTotal,almPrev,false):null;
+  const almPallets=almacRows.filter(r=>!mes||r.mes===mes).reduce((s,r)=>s+(parseFloat(r.pallets)||0),0);
+  const almacCard=(almacRows.length>0)?`
+    <div class="kpi-card">
+      <div class="label">Costo de almacenamiento</div>
+      <div class="value">${almTotal?peso(almTotal):'-'}</div>
+      <div class="sub">${almPallets?almPallets+' pallets guardados':'mercadería guardada'} · aparte del flete</div>
+      ${deltaChip(dAlmac)}
+    </div>`:'';
+
+  // Costo logístico TOTAL = flete + almacenaje (lo que Klozer factura en conjunto).
+  // Solo se muestra si hay almacenaje, para no duplicar el gasto de flete.
+  const logTotal=m.total+almTotal;
+  const logPrev=(p?p.total:0)+almPrev;
+  const dLog=(p&&mes&&mesAnt&&logPrev)?getDelta(logTotal,logPrev,false):null;
+  const almPct=logTotal?almTotal/logTotal*100:0;
+  const totalCard=(almacRows.length>0&&almTotal>0)?`
+    <div class="kpi-card accent">
+      <div class="label">Costo logístico total</div>
+      <div class="value">${peso(logTotal)}</div>
+      <div class="sub">flete + almacenaje · almacenaje ${almPct.toFixed(0)}%</div>
+      ${deltaChip(dLog)}
+    </div>`:'';
+
   document.getElementById('kpi-grid').innerHTML=`
     <div class="kpi-card accent">
       <div class="label">Pedidos del mes</div>
@@ -425,9 +464,9 @@ function renderKPIs(){
       ${deltaChip(dCount,true)}
     </div>
     <div class="kpi-card accent">
-      <div class="label">Gasto total</div>
+      <div class="label">Gasto en fletes</div>
       <div class="value">${peso(m.total)}</div>
-      <div class="sub">prom. ${peso(m.promPedido)}/pedido</div>
+      <div class="sub">prom. ${peso(m.promPedido)}/pedido${almTotal?` · s/ almacenaje`:''}</div>
       ${deltaChip(dTotal)}
     </div>
     <div class="kpi-card accent-${m.avgPct<8?'green':m.avgPct<15?'amber':'red'}">
@@ -447,7 +486,9 @@ function renderKPIs(){
       <div class="value">${cpC?peso(cpC):'-'}</div>
       <div class="sub">promedio del período</div>
       ${deltaChip(dCpC)}
-    </div>`;
+    </div>
+    ${almacCard}
+    ${totalCard}`;
 
   // Renderizar alertas y top destinos
   renderAlertas(m,p,mes,mesAnt);

@@ -154,10 +154,34 @@ function processToRows(factData, pedData) {
 
   // Construir rows de pedidos (igual que antes)
   const rows = [];
+  const almacRows = []; // filas de almacenamiento (costo fijo mensual, NO es flete)
   let sinReporte = 0;
   for (const f of factData) {
     const pid = String(getCol(f,"Pedido","pedido","PEDIDO"));
     if (!pid) continue;
+
+    // ALMACENAMIENTO: Klozer nos cobra por tener mercadería guardada. NO es un
+    // envío: no tiene destino/región/cajas y no debe mezclarse con el flete.
+    // Se separa a su propia tabla. Se identifica por Categoria="Almacenamiento"
+    // (o Pedido="ALMACENAMIENTO") y usa la columna Pallets en vez de CAJAS.
+    const cat = String(getCol(f,"Categoria","categoria","CATEGORIA")||"").trim();
+    if (cat.toLowerCase()==='almacenamiento' || pid.toUpperCase()==='ALMACENAMIENTO') {
+      const fecha = parseD(getCol(f,"Fecha","fecha","FECHA")||"");
+      const cliente = String(getCol(f,"Cliente","cliente","Destinatario","destinatario")||"").trim();
+      const num = v => parseFloat(String(getCol(f,...v)||0).replace(/[^0-9.-]/g,""))||0;
+      const fISO = fecha?fecha.toISOString().split('T')[0]:'';
+      almacRows.push({
+        ext_id: `${fISO}|${cliente}`, // clave estable: una carga por fecha y cliente
+        fecha: fISO||null,
+        mes: fecha ? fecha.toLocaleDateString('es-AR',{month:'long',year:'numeric'}) : '',
+        cliente,
+        pallets: num(["Pallets","pallets","PALLETS"]),
+        servicio: num(["Servicio","servicio","SERVICIO"]),          // costo puro de almacenaje
+        seguro: num(["Seguro","seguro","SEGURO"]),                  // seguro s/ mercadería guardada
+        total: num(["TOTAL A FACTURAR","Total a Facturar","TOTAL","total"]),
+      });
+      continue;
+    }
     // BLINDAJE anti-borrado: si la Facturación trae un pedido que NO está en el
     // Reporte de Pedidos (carga parcial / archivos de distinto período), lo salteamos.
     // Así el upsert NO pisa con blancos el valor declarado / razón social / productos
@@ -207,7 +231,7 @@ function processToRows(factData, pedData) {
   // Limpiar _mes antes de devolver
   rows.forEach(r => delete r._mes);
 
-  return { rows, ppRows, sinReporte };
+  return { rows, ppRows, sinReporte, almacRows };
 }
 
 // ---- UPLOAD TO SUPABASE ----
@@ -219,12 +243,15 @@ async function uploadData() {
   setProgress(10);
 
   try {
-    const { rows, ppRows, sinReporte } = processToRows(factRaw, pedRaw);
+    const { rows, ppRows, sinReporte, almacRows } = processToRows(factRaw, pedRaw);
     setProgress(25);
     const avisoParcial = sinReporte > 0
       ? ` · ⚠️ ${sinReporte} pedido(s) de la Facturación NO están en el Reporte de Pedidos: se saltean para no borrar sus datos. Si esperabas que entraran, subí el Reporte completo del mismo período.`
       : '';
-    setStatus('info',`${rows.length} pedidos · ${ppRows.length} líneas de producto. Subiendo...${avisoParcial}`);
+    const avisoAlmac = almacRows.length > 0
+      ? ` · 📦 ${almacRows.length} fila(s) de almacenamiento (se guardan aparte del flete).`
+      : '';
+    setStatus('info',`${rows.length} pedidos · ${ppRows.length} líneas de producto. Subiendo...${avisoParcial}${avisoAlmac}`);
 
     const { data: existing } = await supabaseClient.from('pedidos').select('pid');
     const existingPids = new Set((existing||[]).map(r=>r.pid));
@@ -269,6 +296,12 @@ async function uploadData() {
       }
     }
 
+    // Almacenamiento: upsert a su propia tabla (clave ext_id = fecha|cliente)
+    if (almacRows.length > 0) {
+      const { error } = await supabaseClient.from('almacenamiento').upsert(almacRows, { onConflict: 'ext_id' });
+      if (error) throw error;
+    }
+
     setProgress(95);
 
     await supabaseClient.from('uploads').insert({
@@ -284,7 +317,7 @@ async function uploadData() {
     );
 
     setProgress(100);
-    setStatus('success',`✓ Listo. ${newRows.length} pedidos nuevos, ${updateRows.length} actualizados, ${ppRows.length} líneas de producto guardadas.${sinReporte>0?` (${sinReporte} salteados por no estar en el Reporte de Pedidos — datos previos intactos.)`:''}`);
+    setStatus('success',`✓ Listo. ${newRows.length} pedidos nuevos, ${updateRows.length} actualizados, ${ppRows.length} líneas de producto guardadas.${almacRows.length>0?` ${almacRows.length} fila(s) de almacenamiento guardadas aparte.`:''}${sinReporte>0?` (${sinReporte} salteados por no estar en el Reporte de Pedidos — datos previos intactos.)`:''}`);
 
     factRaw=null; pedRaw=null;
     document.getElementById('fact-name').textContent='Ningún archivo seleccionado';
