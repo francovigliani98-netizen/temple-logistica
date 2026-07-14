@@ -229,6 +229,37 @@ tr:last-child td{border-bottom:none}
   .filters select,.filters input{flex:1;min-width:0}
 }
 
+/* ===== SALUD DE DATOS ===== */
+.health-chip{font-size:12px;padding:5px 11px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;gap:7px;font-weight:600;white-space:nowrap}
+.health-chip:hover{filter:brightness(0.98)}
+.health-chip .hdot{width:8px;height:8px;border-radius:50%;background:var(--green);flex:none}
+.health-chip.ok{border-color:var(--border);background:var(--green-light);color:var(--green-dark)}
+.health-chip.ok .hdot{background:var(--green)}
+.health-chip.warn{border-color:#fcd34d;background:var(--amber-light);color:var(--amber-dark)}
+.health-chip.warn .hdot{background:var(--amber)}
+.health-chip.err{border-color:#fca5a5;background:var(--red-light);color:var(--red-dark)}
+.health-chip.err .hdot{background:var(--red)}
+
+#health-overlay{position:fixed;inset:0;z-index:210;background:rgba(15,23,42,.45);display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:48px 16px}
+#health-overlay.open{display:flex}
+.health-modal{background:var(--surface);border-radius:var(--radius-lg);max-width:640px;width:100%;box-shadow:0 20px 60px rgba(15,23,42,.35);overflow:hidden}
+.health-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:20px 22px 16px;border-bottom:1px solid var(--border)}
+.health-eyebrow{font-size:15px;font-weight:700;color:var(--text)}
+.health-resumen{font-size:12.5px;color:var(--text2);margin-top:3px}
+.health-list{max-height:60vh;overflow:auto;padding:8px 16px 4px;display:flex;flex-direction:column;gap:8px}
+.hf{display:flex;gap:12px;padding:14px;border:1px solid var(--border);border-left-width:3px;border-radius:var(--radius);background:var(--surface)}
+.hf-warn{border-left-color:var(--amber);background:var(--amber-light)}
+.hf-error{border-left-color:var(--red);background:var(--red-light)}
+.hf-info{border-left-color:var(--blue)}
+.hf-ok{border-left-color:var(--green)}
+.hf-ic{font-size:16px;line-height:1.3;flex:none}
+.hf-cat{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:700;margin-bottom:2px}
+.hf-title{font-size:13.5px;font-weight:600;color:var(--text)}
+.hf-detail{font-size:12.5px;color:var(--text2);margin-top:3px;line-height:1.5}
+.hf-action{font-size:12.5px;color:var(--text);font-weight:600;margin-top:7px}
+.health-foot{padding:14px 22px;border-top:1px solid var(--border);font-size:11.5px;color:var(--text3);background:var(--surface2)}
+.health-foot b{color:var(--text2)}
+
 /* ===== REPORTE MENSUAL ===== */
 #reporte-overlay{position:fixed;inset:0;z-index:200;background:#eef1f4;overflow:auto;padding:0 0 60px}
 .rep-actions{position:sticky;top:0;z-index:5;display:flex;gap:10px;justify-content:flex-end;padding:12px 20px;background:rgba(238,241,244,0.92);backdrop-filter:blur(6px);border-bottom:1px solid #d9dee5}

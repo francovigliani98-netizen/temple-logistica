@@ -145,6 +145,7 @@ async function loadData(){
     renderSimThresh();
     renderTarifario();
     inicializarSimulador();
+    renderHealthChip(); // estado de completitud de datos en la topbar
     showLoading(false);
   }catch(err){
     showLoading(false);
@@ -880,6 +881,123 @@ function renderReporte(){
       <div>Fuente: Facturación Klozer + Reporte de Pedidos · Generado ${hoy}</div>
     </div>
   </div>`;
+}
+
+// ============================================================
+// SALUD DE DATOS — chequeos de completitud/calidad sobre los datos ya cargados.
+// Todo client-side (allRows, almacRows, mixData, listaPrecios); sin consultas extra.
+// ============================================================
+function runDataHealthChecks(){
+  const rows=allRows||[];
+  const out=[];
+  if(!rows.length) return out;
+  const meses=sortMeses([...new Set(rows.map(r=>r.mes).filter(Boolean))]);
+
+  // 1. Meses sin costo de almacenamiento
+  const mesesAlmac=new Set((almacRows||[]).map(r=>r.mes));
+  const faltanAlmac=meses.filter(m=>!mesesAlmac.has(m));
+  if(faltanAlmac.length){
+    out.push({level:'warn',cat:'Almacenamiento',
+      title:`${faltanAlmac.length} ${faltanAlmac.length===1?'mes':'meses'} sin costo de almacenamiento`,
+      detail:`No hay registro de almacenaje para: ${faltanAlmac.map(capMes).join(', ')}. El costo logístico total de esos meses queda incompleto (solo flete).`,
+      action:'Cargá el archivo de almacenamiento de esos meses en el Panel Admin.'});
+  }
+
+  // 2. Pedidos sin valor declarado → sin % logístico ni semáforo
+  const sinValor=rows.filter(r=>r.val_decl==null||r.val_decl===0);
+  if(sinValor.length){
+    const porMes={}; sinValor.forEach(r=>{const k=r.mes||'(sin mes)';porMes[k]=(porMes[k]||0)+1;});
+    const pct=(sinValor.length/rows.length*100).toFixed(0);
+    const detalle=sortMeses(Object.keys(porMes)).map(m=>`${capMes(m.split(' ')[0])}: ${porMes[m]}`).join(' · ');
+    out.push({level:(sinValor.length/rows.length>=0.1)?'warn':'info',cat:'Valor declarado',
+      title:`${sinValor.length} pedido${sinValor.length===1?'':'s'} sin valor declarado (${pct}%)`,
+      detail:`Sin ese dato no se calcula el % logístico ni el semáforo de esos envíos, y quedan afuera del promedio. Por mes → ${detalle}.`,
+      action:'Verificá que el Reporte de Pedidos traiga el valor de mercadería de esos pedidos y resubilo.'});
+  }
+
+  // 3. Pedidos sin detalle de productos → no entran al mix
+  const pidsProd=new Set((mixData||[]).map(r=>r.pid));
+  const sinProd=rows.filter(r=>!pidsProd.has(r.pid));
+  if(sinProd.length){
+    out.push({level:'info',cat:'Composición',
+      title:`${sinProd.length} pedido${sinProd.length===1?'':'s'} sin detalle de productos`,
+      detail:`Estos envíos no aparecen en el mix de producto. Suele ser mercadería no estándar (merch, carros).`,
+      action:''});
+  }
+
+  // 4. Pedidos sin OTIF → quedan fuera del cálculo de servicio
+  const sinOtif=rows.filter(r=>r.otif==null||r.otif==='');
+  if(sinOtif.length){
+    out.push({level:'info',cat:'Servicio',
+      title:`${sinOtif.length} pedido${sinOtif.length===1?'':'s'} sin dato de OTIF`,
+      detail:`El OTIF del período se calcula solo sobre los envíos que tienen el estado de entrega cargado; estos quedan afuera.`,
+      action:''});
+  }
+
+  // 5. Frescura de la lista de precios
+  if((listaPrecios||[]).length){
+    const maxUpd=listaPrecios.reduce((mx,r)=>{const t=r.updated_at?new Date(r.updated_at).getTime():0;return t>mx?t:mx;},0);
+    if(maxUpd){
+      const dias=Math.floor((Date.now()-maxUpd)/86400000);
+      out.push({level:dias>45?'warn':'ok',cat:'Precios',
+        title:`Lista de precios actualizada hace ${dias} días`,
+        detail:dias>45?`Puede estar desactualizada; impacta la rentabilidad del simulador y las reglas de venta.`:`Dentro de lo esperado (se espera una actualización mensual).`,
+        action:dias>45?'Resubí la lista de precios actualizada en el Panel Admin.':''});
+    }
+  }
+
+  return out;
+}
+
+function renderHealthChip(){
+  const chip=document.getElementById('health-chip'); if(!chip) return;
+  const label=document.getElementById('health-label');
+  chip.classList.remove('warn','err','ok');
+  if(!(allRows||[]).length){ label.textContent='Datos'; return; } // sin datos cargados: neutro, no "OK"
+  const f=runDataHealthChecks();
+  const errs=f.filter(x=>x.level==='error').length;
+  const warns=f.filter(x=>x.level==='warn').length;
+  if(errs){ chip.classList.add('err'); label.textContent=`${errs+warns} avisos`; }
+  else if(warns){ chip.classList.add('warn'); label.textContent=`${warns} aviso${warns>1?'s':''}`; }
+  else { chip.classList.add('ok'); label.textContent='Datos OK'; }
+}
+
+function openHealth(){ renderHealth(); document.getElementById('health-overlay').classList.add('open'); }
+function closeHealth(){ document.getElementById('health-overlay').classList.remove('open'); }
+
+function renderHealth(){
+  const f=runDataHealthChecks();
+  const order={error:0,warn:1,info:2,ok:3};
+  f.sort((a,b)=>(order[a.level]??9)-(order[b.level]??9));
+  const errs=f.filter(x=>x.level==='error').length;
+  const warns=f.filter(x=>x.level==='warn').length;
+  const infos=f.filter(x=>x.level==='info').length;
+  const icon={error:'⛔',warn:'⚠️',info:'ℹ️',ok:'✅'};
+  const maxCreated=(allRows||[]).reduce((mx,r)=>{const t=r.created_at?new Date(r.created_at).getTime():0;return t>mx?t:mx;},0);
+  const actualizado=maxCreated?fmtD(new Date(maxCreated).toISOString().slice(0,10)):'—';
+  const resumen=(errs||warns)
+    ? `${warns+errs} punto${(warns+errs)>1?'s':''} para revisar${infos?` · ${infos} informativo${infos>1?'s':''}`:''}`
+    : 'Sin problemas que requieran acción. Todo en orden.';
+  const cards=f.map(x=>`
+    <div class="hf hf-${x.level}">
+      <div class="hf-ic">${icon[x.level]||'•'}</div>
+      <div class="hf-b">
+        <div class="hf-cat">${x.cat}</div>
+        <div class="hf-title">${x.title}</div>
+        <div class="hf-detail">${x.detail}</div>
+        ${x.action?`<div class="hf-action">→ ${x.action}</div>`:''}
+      </div>
+    </div>`).join('');
+  document.getElementById('health-body').innerHTML=`
+    <div class="health-head">
+      <div>
+        <div class="health-eyebrow">🩺 Salud de los datos</div>
+        <div class="health-resumen">${resumen}</div>
+      </div>
+      <button class="rep-btn" onclick="closeHealth()" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="health-list">${cards||'<p style="padding:20px;color:var(--text3);font-size:13px">No hay datos para analizar todavía.</p>'}</div>
+    <div class="health-foot">Última actualización de datos: <b>${actualizado}</b> · ${(allRows||[]).length} pedidos analizados</div>`;
 }
 
 // ---- CHARTS ----
