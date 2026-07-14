@@ -667,6 +667,221 @@ function renderTopDestinos(rows){
   }).join('');
 }
 
+// ============================================================
+// REPORTE MENSUAL — one-pager generado desde datos vivos del mes filtrado.
+// Reutiliza calcMetrics(), almacRows y mixData; no mantiene datos aparte.
+// ============================================================
+function pesoM(n){
+  if(n==null||isNaN(n))return '-';
+  const a=Math.abs(n);
+  if(a>=1e6)return '$'+(n/1e6).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2})+' M';
+  if(a>=1e4)return '$'+Math.round(n/1e3).toLocaleString('es-AR')+' k';
+  return peso(n);
+}
+function capMes(s){ return s?s.charAt(0).toUpperCase()+s.slice(1):s; }
+
+function openReporte(){
+  if(!allRows.length){ alert('Todavía no hay datos cargados.'); return; }
+  renderReporte();
+  document.body.classList.add('report-open');
+  const ov=document.getElementById('reporte-overlay');
+  ov.style.display='block'; ov.scrollTop=0;
+}
+function closeReporte(){
+  document.body.classList.remove('report-open');
+  document.getElementById('reporte-overlay').style.display='none';
+}
+function printReporte(){ window.print(); }
+
+// Mini-gráfico de evolución del flete (todos los meses, con el mes filtrado resaltado).
+// SVG inline: imprime nítido y no depende de Chart.js.
+function buildReporteTrend(mesSel){
+  const mm={};
+  allRows.forEach(r=>{ if(r.mes) mm[r.mes]=(mm[r.mes]||0)+(r.total||0); });
+  const meses=sortMeses(Object.keys(mm));
+  if(meses.length<2) return ''; // sin al menos 2 meses no hay tendencia que mostrar
+  const vals=meses.map(k=>mm[k]);
+  const W=860,H=168,padL=46,padR=14,padT=18,padB=26;
+  const min=Math.min(...vals),max=Math.max(...vals);
+  const lo=min*0.9,hi=max*1.05,span=(hi-lo)||1;
+  const X=i=>padL+i*(W-padL-padR)/(meses.length-1);
+  const Y=v=>padT+(1-(v-lo)/span)*(H-padT-padB);
+  const selIdx=mesSel?meses.indexOf(mesSel):-1;
+  const pts=meses.map((k,i)=>[X(i),Y(vals[i])]);
+  const line=pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  const area='M'+pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L')+` L${X(meses.length-1).toFixed(1)},${(H-padB).toFixed(1)} L${padL},${(H-padB).toFixed(1)} Z`;
+  const short=m=>capMes(m.split(' ')[0].slice(0,3));
+  const gridVals=[hi,(hi+lo)/2,lo];
+  const grid=gridVals.map(v=>{const yy=Y(v).toFixed(1);return `<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="#e2e8f0" stroke-width="1"/><text x="${padL-6}" y="${(Y(v)+3).toFixed(1)}" text-anchor="end" fill="#94a3b8" font-size="10">${(v/1e6).toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1})}</text>`;}).join('');
+  const dots=pts.map((p,i)=> i===selIdx?'':`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.2" fill="#fff" stroke="#0d9488" stroke-width="2"/>`).join('');
+  const xlabels=meses.map((k,i)=>`<text x="${X(i).toFixed(1)}" y="${H-8}" text-anchor="middle" fill="${i===selIdx?'#0d9488':'#94a3b8'}" font-size="10.5" font-weight="${i===selIdx?'700':'400'}">${short(k)}</text>`).join('');
+  let hiLabel='';
+  if(selIdx>=0){
+    const p=pts[selIdx];
+    const above=p[1]>34;
+    const ry=(above?p[1]-24:p[1]+8).toFixed(1);
+    const ty=(above?p[1]-12:p[1]+20).toFixed(1);
+    const lblW=68;
+    const rx=Math.max(2,Math.min(p[0]-lblW/2,W-lblW-2)); // clamp horizontal para que no se corte en el borde
+    const tx=(rx+lblW/2).toFixed(1);
+    hiLabel=`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="5" fill="#0d9488" stroke="#fff" stroke-width="2"/>`+
+      `<rect x="${rx.toFixed(1)}" y="${ry}" width="${lblW}" height="17" rx="5" fill="#0d9488"/>`+
+      `<text x="${tx}" y="${ty}" text-anchor="middle" fill="#fff" font-size="10.5" font-weight="700">${pesoM(vals[selIdx])}</text>`;
+  }
+  return `<div class="rep-card rep-trend">
+    <h4>Evolución del flete facturado</h4>
+    <p class="cnote">Gasto total en flete por mes${selIdx>=0?' · mes actual resaltado':''} · en millones de $</p>
+    <svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;height:auto" role="img" aria-label="Evolución mensual del flete facturado">
+      <defs><linearGradient id="repArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0d9488" stop-opacity="0.22"/><stop offset="100%" stop-color="#0d9488" stop-opacity="0"/></linearGradient></defs>
+      ${grid}
+      <path d="${area}" fill="url(#repArea)"/>
+      <polyline points="${line}" fill="none" stroke="#0d9488" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${dots}${hiLabel}${xlabels}
+    </svg>
+  </div>`;
+}
+
+function renderReporte(){
+  const mes=document.getElementById('filter-mes').value;
+  const rows=filteredRows;
+  const m=calcMetrics(rows);
+
+  // Mes anterior (para el delta de flete)
+  const mesesDisp=sortMeses([...new Set(allRows.map(r=>r.mes).filter(Boolean))]);
+  let p=null,mesAnt='';
+  if(mes){ const idx=mesesDisp.indexOf(mes); if(idx>0){ mesAnt=mesesDisp[idx-1]; p=calcMetrics(allRows.filter(r=>r.mes===mesAnt)); } }
+  const dFlete=(p&&p.total)?getDelta(m.total,p.total,false):null;
+  const mesAntCorto=mesAnt?capMes(mesAnt.split(' ')[0]):'';
+
+  // Semáforo
+  let sv=0,sa=0,sr=0,ss=0;
+  rows.forEach(r=>{const s=r.semaforo; if(s==='verde')sv++; else if(s==='amarillo')sa++; else if(s==='rojo')sr++; else ss++;});
+
+  // OTIF detalle
+  const otifRows=rows.filter(r=>r.otif!==''&&r.otif!=null);
+  const otifOk=otifRows.filter(r=>r.otif==='Sí').length;
+
+  // Región por flete
+  const regMap={};
+  rows.forEach(r=>{const k=r.region||'Sin región'; if(!regMap[k])regMap[k]={g:0,n:0}; regMap[k].g+=(r.total||0); regMap[k].n++;});
+  const regArr=Object.entries(regMap).sort((a,b)=>b[1].g-a[1].g);
+  const regTot=regArr.reduce((s,[,d])=>s+d.g,0)||1;
+  const regMax=regArr.length?regArr[0][1].g:1;
+
+  // Mix de producto (mixData del mes)
+  const pm={};
+  mixData.filter(r=>!mes||r.mes===mes).forEach(r=>{const k=r.producto||'Sin dato'; pm[k]=(pm[k]||0)+(parseFloat(r.cantidad)||0);});
+  let pmArr=Object.entries(pm).sort((a,b)=>b[1]-a[1]);
+  const pmTot=pmArr.reduce((s,[,v])=>s+v,0)||1;
+  if(pmArr.length>6){ const resto=pmArr.slice(6).reduce((s,[,v])=>s+v,0); pmArr=pmArr.slice(0,6); if(resto>0)pmArr.push(['Otros',resto]); }
+  const pmMax=pmArr.length?pmArr[0][1]:1;
+
+  // Top clientes por flete
+  const cl={};
+  rows.forEach(r=>{const k=r.razon_social||r.dest||'Sin nombre'; if(!cl[k])cl[k]={g:0,n:0}; cl[k].g+=(r.total||0); cl[k].n++;});
+  const clArr=Object.entries(cl).sort((a,b)=>b[1].g-a[1].g).slice(0,6);
+
+  // Almacenamiento del mes
+  const almMes=almacRows.filter(r=>!mes||r.mes===mes);
+  const almTotal=almMes.reduce((s,r)=>s+(parseFloat(r.total)||0),0);
+  const almPallets=almMes.reduce((s,r)=>s+(parseFloat(r.pallets)||0),0);
+  const almFalta=mes&&almacRows.length>0&&almMes.length===0;
+
+  const pallMovidos=rows.reduce((s,r)=>s+(parseFloat(r.pallets)||0),0);
+  const fleteMerc=m.facturado?m.total/m.facturado*100:0;
+
+  const titulo=mes?capMes(mes):'Acumulado — todos los períodos';
+  const hoy=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+
+  const fleteFoot = dFlete
+    ? `<span style="color:${dFlete.pct>0?'#0d9488':'#dc2626'};font-weight:700">${dFlete.pct>0?'▲':'▼'} ${dFlete.text.replace('-','')}</span> vs ${mesAntCorto}`
+    : 'gasto total en flete';
+
+  const semSegs=[[sr,'#dc2626'],[sa,'#d97706'],[sv,'#16a34a'],[ss,'#94a3b8']]
+    .filter(([n])=>n>0).map(([n,c])=>`<div class="rep-seg" style="flex:${n};background:${c}">${n}</div>`).join('');
+
+  const regBars=regArr.slice(0,5).map(([k,d])=>`
+    <div class="rep-brow"><div class="bn">${k.replace('Local - ','')}</div>
+      <div class="rep-track"><div class="rep-fill" style="width:${(d.g/regMax*100).toFixed(1)}%"></div></div>
+      <div class="rep-bval">${(d.g/regTot*100).toFixed(0)}%</div></div>`).join('');
+
+  const pmBars=pmArr.length?pmArr.map(([k,v])=>`
+    <div class="rep-brow"><div class="bn">${k.replace(' 500ml','').replace(' 750ml','')}</div>
+      <div class="rep-track"><div class="rep-fill" style="width:${(v/pmMax*100).toFixed(1)}%"></div></div>
+      <div class="rep-bval">${Math.round(v).toLocaleString('es-AR')} <span>·${(v/pmTot*100).toFixed(0)}%</span></div></div>`).join('')
+    : '<p class="cnote">Sin detalle de productos para este período.</p>';
+
+  const clRows=clArr.map(([k,d],i)=>`
+    <div class="rep-cli"><div class="rk">${i+1}</div>
+      <div class="cn">${k} <small>· ${d.n} ${d.n===1?'envío':'envíos'}</small></div>
+      <div class="cv">${pesoM(d.g)}</div></div>`).join('');
+
+  const almBlock = almTotal>0
+    ? `<div class="rep-alert" style="background:#f0fdf4;border-color:#86efac"><div style="font-size:16px">📦</div><p style="color:#14532d"><b>Almacenamiento del mes:</b> ${peso(almTotal)}${almPallets?` · ${almPallets} pallets guardados`:''}. Costo logístico total (flete + almacenaje): <b>${peso(m.total+almTotal)}</b>.</p></div>`
+    : almFalta
+      ? `<div class="rep-alert"><div style="font-size:16px">⚠️</div><p><b>Dato pendiente:</b> no está cargado el costo de almacenamiento de ${titulo}. Los números reflejan <b>solo flete</b>; el costo logístico total sube al cargar ese dato.</p></div>`
+      : '';
+
+  document.getElementById('reporte-body').innerHTML=`
+  <div class="rep-doc">
+    <div class="rep-head">
+      <div>
+        <div class="rep-brand"><div class="rep-glyph">T</div><div class="rep-word"><b>TEMPLE</b> · Logística</div></div>
+        <div class="rep-h1">Resumen mensual — ${titulo}</div>
+        <div class="rep-sub">Operación de flete y distribución · Grupo Temple</div>
+      </div>
+      <div class="rep-meta"><div>Período <b>${titulo}</b></div><div><b>${m.count}</b> envíos · <b>${m.clientes}</b> clientes</div><div>Operador: Klozer</div></div>
+    </div>
+
+    <div class="rep-eyebrow">Titulares del mes</div>
+    <div class="rep-kpis">
+      <div class="rep-kpi"><div class="bar"></div><div class="k">Flete facturado</div><div class="v">${pesoM(m.total)}</div><div class="f">${fleteFoot}</div></div>
+      <div class="rep-kpi"><div class="bar" style="background:#16a34a"></div><div class="k">Nivel de servicio (OTIF)</div><div class="v">${m.otif.toFixed(1)}<small>%</small></div><div class="f">${otifOk} de ${otifRows.length} a término</div></div>
+      <div class="rep-kpi"><div class="bar"></div><div class="k">Mercadería movida</div><div class="v">${m.totalCajas.toLocaleString('es-AR')}<small> cajas</small></div><div class="f">${pallMovidos?pallMovidos+' pallets · ':''}${pesoM(m.facturado)} en valor</div></div>
+      <div class="rep-kpi"><div class="bar" style="background:${fleteMerc<8?'#16a34a':fleteMerc<15?'#d97706':'#dc2626'}"></div><div class="k">Costo flete / mercadería</div><div class="v">${fleteMerc.toFixed(1)}<small>%</small></div><div class="f">${m.avgPct.toFixed(1)}% promedio por pedido</div></div>
+    </div>
+
+    ${buildReporteTrend(mes)}
+
+    <div class="rep-eyebrow">Detalle operativo</div>
+    <div class="rep-grid2">
+      <div class="rep-card">
+        <h4>Eficiencia de costo por pedido</h4>
+        <p class="cnote">Semáforo según peso del flete sobre el envío</p>
+        <div class="rep-stack">${semSegs||'<div class="rep-seg" style="flex:1;background:#94a3b8">sin datos</div>'}</div>
+        <div class="rep-legend">
+          <div class="rep-lg"><span class="rep-dot" style="background:#dc2626"></span>Rojo · costo alto<b>${sr}</b></div>
+          <div class="rep-lg"><span class="rep-dot" style="background:#d97706"></span>Amarillo · a mejorar<b>${sa}</b></div>
+          <div class="rep-lg"><span class="rep-dot" style="background:#16a34a"></span>Verde · eficiente<b>${sv}</b></div>
+          <div class="rep-lg"><span class="rep-dot" style="background:#94a3b8"></span>Sin dato<b>${ss}</b></div>
+        </div>
+      </div>
+      <div class="rep-card">
+        <h4>Mix de producto despachado</h4>
+        <p class="cnote">Cajas por línea de producto</p>
+        <div class="rep-bars">${pmBars}</div>
+      </div>
+      <div class="rep-card">
+        <h4>Distribución geográfica</h4>
+        <p class="cnote">Participación en el flete facturado</p>
+        <div class="rep-bars">${regBars}</div>
+      </div>
+      <div class="rep-card">
+        <h4>Top clientes por flete</h4>
+        <p class="cnote">Mayor facturación de flete del período</p>
+        <div class="rep-clist">${clRows}</div>
+      </div>
+    </div>
+
+    ${almBlock}
+
+    <div class="rep-foot">
+      <div>Temple · Dashboard de Logística — Reporte ${titulo}</div>
+      <div>Fuente: Facturación Klozer + Reporte de Pedidos · Generado ${hoy}</div>
+    </div>
+  </div>`;
+}
+
 // ---- CHARTS ----
 function dc(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
 function mkChart(id,config){dc(id);const el=document.getElementById(id);if(!el)return;charts[id]=new Chart(el,config);}
