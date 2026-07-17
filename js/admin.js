@@ -138,9 +138,16 @@ function processToRows(factData, pedData) {
         provincia: getCol(r,"Provincia","provincia","PROVINCIA")||"",
         razonSocial: getCol(r,"Razon Social","RazonSocial","razonsocial","Razon_Social")||"",
         productos: '',
+        peso: 0, // peso real del pedido (kg). Ver abajo: viene por pedido, no por línea.
       };
       pedProductos[pid] = {};
     }
+
+    // PESO: el Reporte trae la columna "Peso" con el peso TOTAL del pedido REPETIDO
+    // en cada línea (no es por línea). Por eso se toma el máximo, no se suma:
+    // sumar inflaría el peso (un pedido de 150kg con 5 líneas daría 750kg).
+    const pesoLinea = parseFloat(String(getCol(r,"Peso","peso","PESO")||0).replace(/[^0-9.-]/g,""))||0;
+    if (pesoLinea > pedMap[pid].peso) pedMap[pid].peso = pesoLinea;
 
     // Capturar producto y cantidad por línea
     const prod = getCol(r,"Producto","producto","PRODUCTO")||"";
@@ -216,6 +223,7 @@ function processToRows(factData, pedData) {
       dias_klozer: diasKlozer, dias_prep: diasPrep,
       otif: diasKlozer!=null?(diasKlozer<=1?'Sí':'No'):'',
       costo_abril: costoAbril, total_abril: totalAbril,
+      peso_kg: p.peso>0 ? p.peso : null, // peso real del pedido (kg), del Reporte
       productos: p.productos||'', localidad: p.localidad||'', provincia: p.provincia||'',
       _mes: mes // para join con pedProductos
     });
