@@ -1284,51 +1284,73 @@ function renderComparador(){
     cmpRow('Pedidos rojos',      mA.rojos,         mB.rojos,         num, false),
   ].join('');
 
-  // Gráfico de variación % por métrica (mes A → mes B): misma escala para todas,
-  // color por mejora (verde) o empeoramiento (rojo). Las barras divergen del 0:
-  // a la derecha si subió, a la izquierda si bajó; el color indica si es bueno o malo.
+  // Gráfico Mes A vs Mes B: barras agrupadas por métrica con los VALORES REALES.
+  // Como las métricas tienen escalas muy distintas ($ millones vs %), cada par se
+  // normaliza a su propio máximo (la barra más larga del par llena el 100%): así se
+  // ve de un vistazo cuál mes es mayor y por cuánto. El número real va como etiqueta
+  // al final de cada barra (y en el tooltip); el eje X se oculta por ser relativo.
+  // Almacenaje: vive en tabla aparte (almacRows), no en los pedidos. Se suma por mes.
+  const sumAlmac=ms=>almacRows.filter(r=>r.mes===ms).reduce((s,r)=>s+(parseFloat(r.total)||0),0);
   const cmpMetrics=[
-    {label:'Facturación',   a:mA.facturado,     b:mB.facturado,     up:true},
-    {label:'Clientes',      a:mA.clientes,      b:mB.clientes,      up:true},
-    {label:'Cajas/pedido',  a:mA.cajasPorPedido,b:mB.cajasPorPedido,up:true},
-    {label:'% verdes',      a:mA.pctVerdes,     b:mB.pctVerdes,     up:true},
-    {label:'OTIF',          a:mA.otif,          b:mB.otif,          up:true},
-    {label:'Gasto flete',   a:mA.total,         b:mB.total,         up:false},
-    {label:'% logístico',   a:mA.avgPct,        b:mB.avgPct,        up:false},
-    {label:'Pedidos rojos', a:mA.rojos,         b:mB.rojos,         up:false},
+    {label:'Facturación',  a:mA.facturado,     b:mB.facturado,     fmt:p},
+    {label:'Gasto flete',  a:mA.total,         b:mB.total,         fmt:p},
+    {label:'Almacenaje',   a:sumAlmac(mesA),   b:sumAlmac(mesB),   fmt:p},
+    {label:'Prom. x caja', a:mA.promCaja,      b:mB.promCaja,      fmt:p},
+    {label:'Pedidos',      a:mA.count,         b:mB.count,         fmt:num},
+    {label:'% logístico',  a:mA.avgPct,        b:mB.avgPct,        fmt:pct},
   ];
-  const cmpCalc=cmpMetrics.map(m=>{
-    const ch=m.a?(m.b-m.a)/Math.abs(m.a)*100:0;
-    const neutral=Math.abs(ch)<0.5;
-    const improved=m.up?ch>0:ch<0;
-    return {label:m.label, ch:Math.round(ch*10)/10, improved, neutral};
-  });
+  const norm=(v,mx)=>mx>0?v/mx*100:0;
+  const labelsA=cmpMetrics.map(m=>m.fmt(m.a));
+  const labelsB=cmpMetrics.map(m=>m.fmt(m.b));
+
+  // Plugin inline: dibuja el valor real al final de cada barra (Chart.js 4, sin CDN extra)
+  const barValueLabels={
+    id:'barValueLabels',
+    afterDatasetsDraw(chart){
+      const {ctx}=chart;
+      chart.data.datasets.forEach((ds,di)=>{
+        const meta=chart.getDatasetMeta(di);
+        if(meta.hidden||!ds.realLabels)return;
+        ctx.save();
+        ctx.font='600 10px system-ui,-apple-system,sans-serif';
+        ctx.fillStyle='#64748b';ctx.textBaseline='middle';ctx.textAlign='left';
+        meta.data.forEach((bar,i)=>{
+          const txt=ds.realLabels[i];
+          if(txt!=null)ctx.fillText(txt,bar.x+6,bar.y);
+        });
+        ctx.restore();
+      });
+    }
+  };
+
   mkChart('c-radar-cmp',{
     type:'bar',
     data:{
-      labels:cmpCalc.map(c=>c.label),
-      datasets:[{
-        label:'Variación %',
-        data:cmpCalc.map(c=>c.ch),
-        backgroundColor:cmpCalc.map(c=>c.neutral?'rgba(148,163,184,0.6)':c.improved?'rgba(22,163,74,0.85)':'rgba(220,38,38,0.85)'),
-        borderRadius:4,borderSkipped:false
-      }]
+      labels:cmpMetrics.map(m=>m.label),
+      datasets:[
+        {label:mesA,data:cmpMetrics.map(m=>norm(m.a,Math.max(m.a,m.b))),realLabels:labelsA,
+         backgroundColor:'rgba(100,116,139,0.55)',borderRadius:3,borderSkipped:false},
+        {label:mesB,data:cmpMetrics.map(m=>norm(m.b,Math.max(m.a,m.b))),realLabels:labelsB,
+         backgroundColor:'rgba(37,99,235,0.85)',borderRadius:3,borderSkipped:false},
+      ]
     },
     options:{
       indexAxis:'y',
       responsive:true,
       maintainAspectRatio:false,
+      layout:{padding:{right:70}}, // espacio para las etiquetas de valor
       plugins:{
-        legend:{display:false},
+        legend:{position:'top',align:'end',labels:{color:textC,font:{size:12},boxWidth:14,padding:12}},
         tooltip:{callbacks:{
-          label:c=>`${c.raw>0?'+':''}${c.raw}%  (${mesA} → ${mesB})`
+          label:c=>`${c.dataset.label}: ${c.dataset.realLabels[c.dataIndex]}`
         }}
       },
       scales:{
-        x:{grid:{color:gridC},ticks:{color:textC,font:{size:11},callback:v=>v+'%'}},
+        x:{max:112,grid:{display:false},ticks:{display:false},border:{display:false}},
         y:{grid:{display:false},ticks:{color:textC,font:{size:12,weight:'500'}}}
       }
-    }
+    },
+    plugins:[barValueLabels]
   });
 }
 
