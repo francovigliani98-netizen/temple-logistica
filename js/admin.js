@@ -75,7 +75,10 @@ function loadFile(input, type) {
     checkReadyToUpload();
   });
 }
-function checkReadyToUpload() { document.getElementById('btn-upload').disabled=!(factRaw&&pedRaw); }
+// Facturación es obligatoria; el Reporte de Pedidos es OPCIONAL.
+// Con solo Facturación se puede actualizar almacenamiento (y los fletes quedan
+// protegidos por el blindaje anti-borrado, que los saltea si no hay Reporte).
+function checkReadyToUpload() { document.getElementById('btn-upload').disabled=!factRaw; }
 
 // ---- DATA PROCESSING ----
 function parseD(v) {
@@ -116,10 +119,12 @@ function normalizarProducto(nombre) {
 function processToRows(factData, pedData) {
   // Construir mapa de pedidos desde reporte de pedidos
   // AHORA también guarda detalle de productos: { pid -> [{producto, cantidad}] }
+  // pedData puede venir vacío (carga solo-Facturación): en ese caso pedMap queda
+  // vacío y el blindaje saltea todos los fletes; solo se guarda almacenamiento.
   const pedMap = {};
   const pedProductos = {}; // pid -> { productoNorm -> cantidad }
 
-  for (const r of pedData) {
+  for (const r of (pedData||[])) {
     const pid = String(getCol(r,"Pedido","pedido","PEDIDO")); if (!pid) continue;
 
     if (!pedMap[pid]) {
@@ -236,7 +241,8 @@ function processToRows(factData, pedData) {
 
 // ---- UPLOAD TO SUPABASE ----
 async function uploadData() {
-  if (!factRaw || !pedRaw) return;
+  if (!factRaw) return;
+  const soloFact = !pedRaw; // carga sin Reporte de Pedidos → solo actualiza almacenamiento
   const btn = document.getElementById('btn-upload');
   btn.disabled = true;
   setStatus('info','Procesando archivos...');
@@ -246,7 +252,9 @@ async function uploadData() {
     const { rows, ppRows, sinReporte, almacRows } = processToRows(factRaw, pedRaw);
     setProgress(25);
     const avisoParcial = sinReporte > 0
-      ? ` · ⚠️ ${sinReporte} pedido(s) de la Facturación NO están en el Reporte de Pedidos: se saltean para no borrar sus datos. Si esperabas que entraran, subí el Reporte completo del mismo período.`
+      ? (soloFact
+          ? ` · ℹ️ Modo solo-Facturación: ${sinReporte} flete(s) NO se tocaron (para actualizar fletes hay que subir también el Reporte de Pedidos). Sus datos previos quedan intactos.`
+          : ` · ⚠️ ${sinReporte} pedido(s) de la Facturación NO están en el Reporte de Pedidos: se saltean para no borrar sus datos. Si esperabas que entraran, subí el Reporte completo del mismo período.`)
       : '';
     const avisoAlmac = almacRows.length > 0
       ? ` · 📦 ${almacRows.length} fila(s) de almacenamiento (se guardan aparte del flete).`
