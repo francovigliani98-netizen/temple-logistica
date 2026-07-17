@@ -298,9 +298,11 @@ function loadListaAdmin(input) {
       const iSku  = headers.findIndex(h => h.includes('SKU') || h.includes('CODIGO') || h.includes('CÓDIGO'));
       const iDesc = headers.findIndex(h => h.includes('DESCRIPCION') || h.includes('DESCRIPCIÓN'));
       // unidades por bulto: columna con "UNIDAD"/"UNI" que NO sea de precio (PTC/PRECIO)
-      const iUni  = headers.findIndex(h => (h.includes('UNIDAD') || h.includes('UNI')) && !h.includes('PTC') && !h.includes('PRECIO'));
+      const iUni  = headers.findIndex(h => (h.includes('UNIDAD') || h.includes('UNI')) && !h.includes('PTC') && !h.includes('PRECIO') && !h.includes('KG'));
       const iPtc  = headers.findIndex(h => h.includes('PTC') && h.includes('UNI'));
       const iTotal= headers.findIndex(h => h.includes('PTC') && (h.includes('TOTAL') || h.includes('BULTO')));
+      // peso por unidad (kg): columna "KG por unidad". Base para el flete por peso.
+      const iPeso = headers.findIndex(h => h.includes('KG'));
 
       const productos = [];
       const seenSkus = new Set();
@@ -318,15 +320,18 @@ function loadListaAdmin(input) {
         const ptcBulto = typeof r[iTotal] === 'number' ? r[iTotal] :
                          (ptcUni && uni ? ptcUni * uni : null);
         if (!ptcBulto) continue;
-        productos.push({ sku: skuInt, descripcion: String(desc).trim(), unidades_por_bulto: uni, precio_unidad: ptcUni || ptcBulto / uni, precio_bulto: ptcBulto });
+        const peso = (iPeso >= 0 && typeof r[iPeso] === 'number' && r[iPeso] > 0) ? r[iPeso] : null;
+        productos.push({ sku: skuInt, descripcion: String(desc).trim(), unidades_por_bulto: uni, precio_unidad: ptcUni || ptcBulto / uni, precio_bulto: ptcBulto, peso_unidad: peso });
       }
 
       if (!productos.length) throw new Error('No se encontraron productos válidos');
 
       listaData = productos;
+      const conPeso = productos.filter(p => p.peso_unidad != null).length;
       const msg = document.getElementById('lista-status');
       msg.className = 'status-msg success';
-      msg.textContent = `✓ Archivo leído: ${productos.length} productos encontrados`;
+      msg.textContent = `✓ Archivo leído: ${productos.length} productos encontrados` +
+        (iPeso >= 0 ? ` · ${conPeso} con peso (kg/unidad)` : ` · ⚠️ sin columna "KG por unidad"`);
       msg.style.display = 'block';
       document.getElementById('btn-upload-lista').disabled = false;
     } catch(err) {
